@@ -21,15 +21,16 @@ pub const LOGGING_PREFIX: &str = "indexer_opts";
     next_line_help(true)
 )]
 pub struct Opts {
-    /// Sets the micro-indexer instance ID (for reading/writing indexer meta-data)
+    /// Enabled Indexer for Explorer debug level of logs
     #[clap(long)]
     pub debug: bool,
-    /// Enabled Indexer for Explorer debug level of logs
+    /// Sets the micro-indexer instance ID (for reading/writing indexer meta-data)
     #[clap(long, env)]
     pub indexer_id: String,
     /// Block height to start the stream from
     #[clap(long, short, env)]
     pub start_block_height: u64,
+    /// NEAR JSON RPC url
     #[clap(long, short, env)]
     pub near_archival_rpc_url: String,
     // Chain ID: testnet or mainnet, used for NEAR Lake initialization
