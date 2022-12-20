@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "indexer-base",
+    "indexer-accounts",
+    "indexer-balances",
+    "indexer-events",
+]

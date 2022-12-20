@@ -1,0 +1,33 @@
+[package]
+name = "indexer-balances"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.64"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+actix-web = "=4.0.1"
+anyhow = "1.0.51"
+bigdecimal = { version = "0.2", features = ["serde"] }
+cached = "0.23.0"
+clap = { version = "3.2.17", features = ["color", "derive", "env"] }
+dotenv = "0.15.0"
+futures = "0.3.5"
+lazy_static = "1.4.0"
+num-traits = "0.2.11"
+prometheus = "0.13.1"
+quote = "1.0.17"
+sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres", "bigdecimal", "json"] }
+syn = "1.0.90"
+tokio = { version = "1.8", features = ["sync", "time", "macros", "rt-multi-thread"] }
+tokio-stream = { version = "0.1" }
+tracing = "0.1.35"
+tracing-appender = "0.1.2"
+tracing-subscriber = "0.2.4"
+
+near-jsonrpc-primitives = "0.14.0"
+near-jsonrpc-client = "0.4.0-beta.0"
+near-lake-framework = "0.5.0"
+near-primitives = "0.14.0"
