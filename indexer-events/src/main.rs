@@ -1,11 +1,10 @@
 // TODO cleanup imports in all the files in the end
-use crate::configs::{init_tracing, Opts};
-use clap::Parser;
-use dotenv::dotenv;
 use futures::StreamExt;
+
 use near_lake_framework::near_indexer_primitives;
-use std::env;
-mod configs;
+
+use indexer_opts::{init_tracing, Opts, Parser};
+
 mod db_adapters;
 mod metrics;
 mod models;
@@ -26,20 +25,29 @@ pub struct AccountWithContract {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
     let opts: Opts = Opts::parse();
 
-    let pool = sqlx::PgPool::connect(&env::var("DATABASE_URL")?).await?;
+    let pool = sqlx::PgPool::connect(&opts.database_url).await?;
 
     let _worker_guard = init_tracing(opts.debug)?;
 
-    let config: near_lake_framework::LakeConfig = opts.to_lake_config().await;
+    let config: near_lake_framework::LakeConfig = opts.to_lake_config(&pool).await?;
+
+    indexer_opts::update_meta(
+        &pool,
+        indexer_opts::MetaAction::RegisterIndexer {
+            indexer_id: opts.indexer_id.to_string(),
+            start_block_height: opts.start_block_height,
+        },
+    )
+    .await?;
+
     let (_lake_handle, stream) = near_lake_framework::streamer(config);
 
     tokio::spawn(async move {
         let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
             .map(|streamer_message| {
-                handle_streamer_message(streamer_message, &pool, &opts.chain_id)
+                handle_streamer_message(streamer_message, &pool, &opts.indexer_id, &opts.chain_id)
             })
             .buffer_unordered(1usize);
 
@@ -73,7 +81,8 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_streamer_message(
     streamer_message: near_indexer_primitives::StreamerMessage,
     pool: &sqlx::Pool<sqlx::Postgres>,
-    chain_id: &str,
+    indexer_id: &str,
+    chain_id: &indexer_opts::ChainId,
 ) -> anyhow::Result<u64> {
     metrics::BLOCK_PROCESSED_TOTAL.inc();
     // Prometheus Gauge Metric type do not support u64
@@ -91,5 +100,24 @@ async fn handle_streamer_message(
 
     db_adapters::events::store_events(pool, &streamer_message, chain_id).await?;
 
+    match indexer_opts::update_meta(
+        &pool,
+        indexer_opts::MetaAction::UpdateMeta {
+            indexer_id: indexer_id.to_string(),
+            last_processed_block_height: streamer_message.block.header.height,
+        },
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(err) => {
+            tracing::warn!(
+                target: crate::LOGGING_PREFIX,
+                "Failed to update meta for INDEXER ID {}\n{:#?}",
+                indexer_id,
+                err,
+            );
+        }
+    };
     Ok(streamer_message.block.header.height)
 }

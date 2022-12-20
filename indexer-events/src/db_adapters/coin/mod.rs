@@ -25,7 +25,7 @@ struct FtEvent {
 pub(crate) async fn store_ft(
     pool: &sqlx::Pool<sqlx::Postgres>,
     streamer_message: &near_indexer_primitives::StreamerMessage,
-    chain_id: &str,
+    chain_id: &indexer_opts::ChainId,
 ) -> anyhow::Result<()> {
     let mut events: Vec<CoinEvent> = vec![];
 
@@ -56,7 +56,7 @@ pub(crate) fn filter_zeros_and_enumerate_events(
 async fn collect_ft_for_shard(
     streamer_message: &near_indexer_primitives::StreamerMessage,
     shard: &near_indexer_primitives::IndexerShard,
-    chain_id: &str,
+    chain_id: &indexer_opts::ChainId,
 ) -> anyhow::Result<Vec<CoinEvent>> {
     let mut events: Vec<CoinEvent> = vec![];
 

@@ -41,3 +41,5 @@ near-jsonrpc-primitives = "0.15.0"
 near-jsonrpc-client = "0.4.0-beta.0"
 near-lake-framework = "0.6.0"
 near-primitives = "0.15.0"
+
+indexer-opts = { path = "../indexer-opts" }

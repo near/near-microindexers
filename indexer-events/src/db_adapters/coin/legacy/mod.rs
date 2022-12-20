@@ -13,10 +13,10 @@ pub(crate) async fn collect_legacy(
     shard_id: &near_indexer_primitives::types::ShardId,
     receipt_execution_outcomes: &[near_indexer_primitives::IndexerExecutionOutcomeWithReceipt],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
-    chain_id: &str,
+    chain_id: &indexer_opts::ChainId,
 ) -> anyhow::Result<Vec<CoinEvent>> {
     // We don't need to store legacy events for testnet
-    if chain_id == "testnet" {
+    if chain_id == &indexer_opts::ChainId::Testnet {
         return Ok(vec![]);
     }
     let mut events: Vec<CoinEvent> = vec![];
