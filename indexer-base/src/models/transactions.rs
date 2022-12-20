@@ -3,6 +3,8 @@ use std::str::FromStr;
 use bigdecimal::BigDecimal;
 use sqlx::Arguments;
 
+use near_lake_framework::near_indexer_primitives;
+
 use crate::models::{FieldCount, PrintEnum};
 
 #[derive(Debug, sqlx::FromRow, FieldCount)]

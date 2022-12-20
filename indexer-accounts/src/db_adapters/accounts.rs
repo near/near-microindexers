@@ -2,6 +2,7 @@ use crate::models;
 use bigdecimal::BigDecimal;
 use futures::future::try_join_all;
 use futures::try_join;
+use near_lake_framework::near_indexer_primitives;
 
 pub(crate) async fn store_accounts(
     pool: &sqlx::Pool<sqlx::Postgres>,

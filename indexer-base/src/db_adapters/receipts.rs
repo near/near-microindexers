@@ -9,6 +9,8 @@ use itertools::{Either, Itertools};
 use sqlx::Arguments;
 use sqlx::Row;
 
+use near_lake_framework::near_indexer_primitives;
+
 use crate::models;
 
 /// Saves receipts to database

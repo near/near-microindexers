@@ -5,6 +5,8 @@ use futures::{try_join, StreamExt};
 use std::env;
 use tracing_subscriber::EnvFilter;
 
+use near_lake_framework::near_indexer_primitives;
+
 use crate::configs::Opts;
 
 mod configs;
@@ -23,48 +25,31 @@ async fn main() -> anyhow::Result<()> {
     dotenv().ok();
 
     let opts: Opts = Opts::parse();
-
-    // let options = sqlx::postgres::PgConnectOptions::new()
-    //     .host(&env::var("DB_HOST")?)
-    //     .port(env::var("DB_PORT")?.parse()?)
-    //     .username(&env::var("DB_USER")?)
-    //     .password(&env::var("DB_PASSWORD")?)
-    //     .database(&env::var("DB_NAME")?)
-    //     .extra_float_digits(2);
-
-    // let pool = sqlx::PgPool::connect_with(options).await?;
     let pool = sqlx::PgPool::connect(&env::var("DATABASE_URL")?).await?;
-    // TODO Error: while executing migrations: error returned from database: 1128 (HY000): Function 'near_indexer.GET_LOCK' is not defined
-    // sqlx::migrate!().run(&pool).await?;
 
     // let start_block_height = match opts.start_block_height {
     //     Some(x) => x,
     //     None => models::start_after_interruption(&pool).await?,
     // };
-    let config = near_lake_framework::LakeConfig {
-        s3_config: None,
-        s3_bucket_name: opts.s3_bucket_name.clone(),
-        s3_region_name: opts.s3_region_name.clone(),
-        start_block_height: opts.start_block_height.unwrap(),
-    };
+    let config = opts.to_lake_config(opts.start_block_height).await;
     init_tracing();
 
-    let stream = near_lake_framework::streamer(config);
+    let (_lake_handle, stream) = near_lake_framework::streamer(config);
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
         .map(|streamer_message| handle_streamer_message(streamer_message, &pool))
         .buffer_unordered(1usize);
 
-    // let mut time_now = std::time::Instant::now();
+    let mut time_now = std::time::Instant::now();
     while let Some(handle_message) = handlers.next().await {
         match handle_message {
             Ok(block_height) => {
-                // let elapsed = time_now.elapsed();
-                // println!(
-                //     "Elapsed time spent on block {}: {:.3?}",
-                //     block_height, elapsed
-                // );
-                // time_now = std::time::Instant::now();
+                let elapsed = time_now.elapsed();
+                println!(
+                    "Elapsed time spent on block {}: {:.3?}",
+                    block_height, elapsed
+                );
+                time_now = std::time::Instant::now();
             }
             Err(e) => {
                 return Err(anyhow::anyhow!(e));

@@ -1,5 +1,6 @@
 use cached::Cached;
 use futures::future::try_join_all;
+use near_lake_framework::near_indexer_primitives;
 
 use crate::models;
 

@@ -3,6 +3,8 @@ use std::convert::TryFrom;
 use futures::future::try_join_all;
 use futures::try_join;
 
+use near_lake_framework::near_indexer_primitives;
+
 use crate::models;
 
 pub(crate) async fn store_access_keys(

@@ -1,5 +1,5 @@
 use futures::future::try_join_all;
-use near_indexer_primitives::views::AccessKeyPermissionView;
+use near_lake_framework::near_indexer_primitives::views::AccessKeyPermissionView;
 use sqlx::Arguments;
 use std::fmt::Write;
 

@@ -6,6 +6,8 @@ use std::env;
 use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
+use near_lake_framework::near_indexer_primitives;
+
 use crate::configs::Opts;
 
 mod configs;
@@ -39,15 +41,11 @@ async fn main() -> anyhow::Result<()> {
 
     let opts: Opts = Opts::parse();
     let pool = sqlx::PgPool::connect(&env::var("DATABASE_URL")?).await?;
-    let config = near_lake_framework::LakeConfig {
-        s3_config: None,
-        s3_bucket_name: opts.s3_bucket_name.clone(),
-        s3_region_name: opts.s3_region_name.clone(),
-        start_block_height: opts.start_block_height.unwrap(),
-    };
+    // create a lake configuration with S3 information passed in as ENV vars
+    let config = opts.to_lake_config(opts.start_block_height).await;
     init_tracing();
 
-    let stream = near_lake_framework::streamer(config);
+    let (_lake_handle, stream) = near_lake_framework::streamer(config);
 
     // We want to prevent unnecessary SELECT queries to the database to find
     // the Transaction hash for the Receipt.

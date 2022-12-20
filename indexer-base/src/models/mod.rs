@@ -2,7 +2,7 @@ use futures::future::try_join_all;
 use sqlx::Arguments;
 use std::fmt::Write;
 
-use near_indexer_primitives::views::{
+use near_lake_framework::near_indexer_primitives::views::{
     AccessKeyPermissionView, ExecutionStatusView, StateChangeCauseView,
 };
 

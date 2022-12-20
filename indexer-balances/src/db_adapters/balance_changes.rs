@@ -228,7 +228,7 @@ async fn store_validator_accounts_update_for_chunk(
             involved_account_id: None,
             direction: crate::models::Direction::Inbound.print().to_string(),
             cause: crate::models::Cause::ValidatorsReward.print().to_string(),
-            status: ExecutionStatusView::SuccessValue("".to_string())
+            status: ExecutionStatusView::SuccessValue(vec![])
                 .print()
                 .to_string(),
             delta_nonstaked_amount: deltas.0,

@@ -1,6 +1,8 @@
 use bigdecimal::BigDecimal;
 use sqlx::Arguments;
 
+use near_lake_framework::near_indexer_primitives;
+
 use crate::models::FieldCount;
 
 #[derive(Debug, Clone, sqlx::FromRow, FieldCount)]

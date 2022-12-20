@@ -15,17 +15,35 @@ pub(crate) struct Opts {
     /// Enabled Indexer for Explorer debug level of logs
     #[clap(long)]
     pub debug: bool,
-    // todo
-    // /// Store initial data from genesis like Accounts, AccessKeys
-    // #[clap(long)]
-    // pub store_genesis: bool,
-    /// AWS S3 bucket name to get the stream from
-    #[clap(long)]
-    pub s3_bucket_name: String,
-    /// AWS S3 bucket region
-    #[clap(long)]
-    pub s3_region_name: String,
     /// Block height to start the stream from. If None, start from interruption
     #[clap(long, short)]
-    pub start_block_height: Option<u64>,
+    pub start_block_height: u64,
+    // Chain ID: testnet or mainnet, used for NEAR Lake initialization
+    #[clap(long, env)]
+    pub chain_id: String,
+    /// Port to enable metrics service
+    #[clap(long, short, env, default_value_t = 3000)]
+    pub port: u16,
+}
+
+impl Opts {
+    // returns a Lake Config object where AWS credentials are sourced from .env file first, and then from .aws/credentials if not found.
+    // https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html
+    pub async fn to_lake_config(&self, start_block_height: u64) -> near_lake_framework::LakeConfig {
+        let config_builder = near_lake_framework::LakeConfigBuilder::default();
+
+        tracing::info!(target: crate::INDEXER, "CHAIN_ID: {}", self.chain_id);
+
+        match self.chain_id.as_str() {
+            "mainnet" => config_builder.mainnet(),
+            "testnet" => config_builder.testnet(),
+            invalid_chain => panic!(
+                "Invalid CHAIN_ID: `{}`. Try `mainnet` or `testnet`",
+                invalid_chain
+            ),
+        }
+            .start_block_height(start_block_height)
+            .build()
+            .expect("Failed to build LakeConfig")
+    }
 }
