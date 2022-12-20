@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use bigdecimal::ToPrimitive;
+use bigdecimal::{FromPrimitive, ToPrimitive};
 pub use clap::{self, Parser};
 use tracing_subscriber::EnvFilter;
 
@@ -46,7 +46,7 @@ pub struct Opts {
     pub database_url: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainId {
     Mainnet,
     Testnet,
@@ -56,6 +56,103 @@ pub enum ChainId {
 pub enum StartMode {
     FromLatest,
     FromInterruption,
+}
+
+#[derive(Debug)]
+pub enum MetaAction {
+    RegisterIndexer {
+        indexer_id: String,
+        start_block_height: u64,
+    },
+    UpdateMeta {
+        indexer_id: String,
+        last_processed_block_height: u64,
+    },
+}
+
+pub async fn update_meta(
+    db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
+    action: MetaAction,
+) -> anyhow::Result<()> {
+    match action {
+        MetaAction::UpdateMeta {
+            indexer_id,
+            last_processed_block_height,
+        } => {
+            let block_height: bigdecimal::BigDecimal =
+                match bigdecimal::BigDecimal::from_u64(last_processed_block_height) {
+                    Some(value) => value,
+                    None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
+                };
+            match sqlx::query!(
+                r#"
+UPDATE meta SET last_processed_block_height = $1 WHERE indexer_id = $2
+                "#,
+                block_height,
+                indexer_id,
+            )
+            .execute(db_with_meta_data_pool)
+            .await
+            {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    tracing::warn!(
+                        target: LOGGING_PREFIX,
+                        "Failed to update meta for INDEXER ID {}\n{:#?}",
+                        indexer_id,
+                        err,
+                    );
+                    anyhow::bail!(err)
+                }
+            }
+        }
+        MetaAction::RegisterIndexer {
+            indexer_id,
+            start_block_height,
+        } => {
+            let block_height: bigdecimal::BigDecimal =
+                match bigdecimal::BigDecimal::from_u64(start_block_height) {
+                    Some(value) => value,
+                    None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
+                };
+            if (sqlx::query!(
+                r#"
+INSERT INTO meta (indexer_id, last_processed_block_height, start_block_height)
+VALUES ($1, $2, $2)
+                "#,
+                indexer_id,
+                block_height,
+            )
+            .execute(db_with_meta_data_pool)
+            .await)
+                .is_err()
+            {
+                match sqlx::query!(
+                    r#"
+UPDATE meta SET start_block_height = $1, last_processed_block_height = $1 WHERE indexer_id = $2
+                    "#,
+                    block_height,
+                    indexer_id,
+                )
+                .execute(db_with_meta_data_pool)
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(err) => {
+                        tracing::warn!(
+                            target: LOGGING_PREFIX,
+                            "Failed to update meta for INDEXER ID {}\n{:#?}",
+                            indexer_id,
+                            err,
+                        );
+                        anyhow::bail!(err)
+                    }
+                }
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
 pub fn init_tracing(debug: bool) -> anyhow::Result<tracing_appender::non_blocking::WorkerGuard> {
@@ -175,7 +272,7 @@ async fn final_block_height(rpc_url: &str) -> u64 {
     let latest_block = client
         .call(request)
         .await
-        .expect(format!("Failed to fetch final block from RPC {}", rpc_url).as_str());
+        .unwrap_or_else(|_| panic!("Failed to fetch final block from RPC {}", rpc_url));
 
     latest_block.header.height
 }
@@ -196,9 +293,5 @@ SELECT last_processed_block_height FROM meta WHERE indexer_id = $1 LIMIT 1
     record
         .last_processed_block_height
         .to_u64()
-        .ok_or(anyhow::anyhow!(
-            "Failed to convert `last_processed_block_height` to u64"
-        ))
+        .ok_or_else(|| anyhow::anyhow!("Failed to convert `last_processed_block_height` to u64"))
 }
-
-
