@@ -3,9 +3,10 @@ use futures::StreamExt;
 
 use near_lake_framework::near_indexer_primitives;
 
-use indexer_opts::{init_tracing, Opts, Parser};
+use indexer_opts::{Opts, Parser};
 
 mod db_adapters;
+mod configs;
 mod metrics;
 mod models;
 
@@ -29,18 +30,9 @@ async fn main() -> anyhow::Result<()> {
 
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
 
-    let _worker_guard = init_tracing(opts.debug)?;
+    let _worker_guard = configs::init_tracing(opts.debug)?;
 
     let config: near_lake_framework::LakeConfig = opts.to_lake_config(&pool).await?;
-
-    indexer_opts::update_meta(
-        &pool,
-        indexer_opts::MetaAction::RegisterIndexer {
-            indexer_id: opts.indexer_id.to_string(),
-            start_block_height: opts.start_block_height,
-        },
-    )
-    .await?;
 
     let (_lake_handle, stream) = near_lake_framework::streamer(config);
 
@@ -100,24 +92,13 @@ async fn handle_streamer_message(
 
     db_adapters::events::store_events(pool, &streamer_message, chain_id).await?;
 
-    match indexer_opts::update_meta(
+    // TODO: we might want to call in once in N blocks instead
+    let _ = indexer_opts::update_meta(
         &pool,
-        indexer_opts::MetaAction::UpdateMeta {
-            indexer_id: indexer_id.to_string(),
-            last_processed_block_height: streamer_message.block.header.height,
-        },
+        &indexer_id,
+        streamer_message.block.header.height,
     )
-    .await
-    {
-        Ok(_) => {}
-        Err(err) => {
-            tracing::warn!(
-                target: crate::LOGGING_PREFIX,
-                "Failed to update meta for INDEXER ID {}\n{:#?}",
-                indexer_id,
-                err,
-            );
-        }
-    };
+    .await;
+
     Ok(streamer_message.block.header.height)
 }

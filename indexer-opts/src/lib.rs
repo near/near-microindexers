@@ -132,8 +132,7 @@ impl Opts {
                     &self.indexer_type,
                     start_block_height_from_rpc,
                     None,
-                )
-                .await?;
+                ).await?;
                 start_block_height_from_rpc
             }
             StartMode::FromInterruption => {
