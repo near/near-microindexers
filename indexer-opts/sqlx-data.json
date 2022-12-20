@@ -1,0 +1,23 @@
+{
+  "db": "PostgreSQL",
+  "28a0bf659e47bca17cf8a9d951489819d2dda115cd3f83b50019cb811d5ead5a": {
+    "describe": {
+      "columns": [
+        {
+          "name": "last_processed_block_height",
+          "ordinal": 0,
+          "type_info": "Numeric"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\nSELECT last_processed_block_height FROM meta WHERE indexer_id = $1 LIMIT 1\n                    "
+  }
+}
