@@ -133,7 +133,6 @@ INSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed
 VALUES ($1, $2, now(), $3, $3, $4)
 ON CONFLICT (indexer_id) DO UPDATE
     SET start_block_height = EXCLUDED.start_block_height,
-        last_processed_block_height = EXCLUDED.start_block_height,
         end_block_height = EXCLUDED.end_block_height,
         indexer_started_at = now()
     WHERE __meta.indexer_id = EXCLUDED.indexer_id
