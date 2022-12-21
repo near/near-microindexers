@@ -14,8 +14,6 @@ This lib is a shared `clap::Parser` instance that defines CLI arguments for all 
 
 - `indexer-id` | **Required** Sets the micro-indexer instance ID (for reading/writing indexer meta-data)
 - `indexer-type` | **Required** Sets the micro-indexer instance type (for reading/writing indexer meta-data)
-- `lake-aws-access-key` | **Required** AWS Access Key with the rights to read from AWS S3
-- `lake-aws-secret-access-key` | **Required** AWS Secret Access Key with the rights to read from AWS S3
 - `chain-id` | **Required** Chain id: testnet or mainnet, used for NEAR Lake initialization
 - `database-url` | **Required** Database URL
 - `start-block-height` | Block height to start the stream from (required if `start_mode == from-interruption`)
@@ -32,11 +30,10 @@ Example:
 
 ```
 INDEXER_ID=indexer-events-tip
-INDEXER_TYPE=fill-gap-week
-LAKE_AWS_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
-LAKE_AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+INDEXER_TYPE=indexer-events
 START_BLOCK_HEIGHT=0
-NEAR_ARCHICAL_RPC_URL=https://archival.rpc.near.org
+END_BLOCK_HEIGHT=10
+RPC_URL=https://archival.rpc.near.org
 CHAIN_ID=mainnet
 PORT=300
 START_MODE=from-interruption
@@ -56,7 +53,7 @@ indexer-opts = { path = "../indexer-opts" }
 Import necessary structs and functions
 
 ```rust
-use indexer_opts::{init_tracing, Opts, Parser};
+use indexer_opts::{Opts, Parser};
 ```
 
 Update your `main()`
@@ -64,8 +61,6 @@ Update your `main()`
 ```rust
 // parse arguments
 let opts = Opts::parse();
-// inititialize tracing the logs
-let _worker_guard = init_tracing(opts.debug)?;
 // create database connection pool
 let pool = sqlx::PgPool::connect(&opts.database_url).await?;
 
@@ -123,26 +118,45 @@ match indexer_opts::update_meta(
 
 ```
 ./indexer \
-    --indexer-id domestic-racoon \
-    --lake-aws-access-key AKIAIOSFODNN7EXAMPLE \
-    --lake-aws-secret-access-key wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
+    --indexer-id indexer-events-tip \
+    --indexer-type indexer-events \
     --start-block-height 0 \
     --chain-id mainnet \
     --start-mode from-latest
     --database-url postgres://user:pass@host/db
 ```
 
-This will start indexer with ID `domestic-racoon` for `mainnet` from the latest block. If it is restarted it will start from the latest block again. **Might skip blocks** depending on how long it was stopped.
+This will start indexer with ID `indexer-events-tip` and type `indexer-events` for `mainnet` from the latest block. If it is restarted it will start from the latest block again. **Might skip blocks** depending on how long it was stopped.
 
 ```
 ./indexer \
-    --indexer-id wild-snail \
-    --lake-aws-access-key AKIAIOSFODNN7EXAMPLE \
-    --lake-aws-secret-access-key wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
+    --indexer-id indexer-events-tip \
+    --indexer-type indexer-events \
     --start-block-height 100000000 \
     --chain-id mainnet \
     --start-mode from-interruption
     --database-url postgres://user:pass@host/db
 ```
 
-This will start indexer with ID `wild-snail` for `mainnet` from the block height `100 000 000`. If it is restarted it will start from the block it was stopped. **Won't skip blocks** unless something wrong with the `meta` table of the database.
+This will start indexer with ID `indexer-events-tip` and type `indexer-events` for `mainnet` from the block height `100 000 000`. If it is restarted it will start from the block it was stopped. **Won't skip blocks** unless something wrong with the `__meta` table of the database.
+
+## Contributing
+
+Please note that this crate uses `sqlx` with a feature `offline` for offline checks https://docs.rs/sqlx/0.6.2/sqlx/macro.query.html#offline-mode-requires-the-offline-feature
+
+Read more https://github.com/launchbadge/sqlx/tree/main/sqlx-cli#enable-building-in-offline-mode-with-query
+
+Install `sqlx-cli`
+
+```
+$ cargo install sqlx-cli --no-default-features --features postgres
+```
+
+Basically if you change anything in the `__meta` schema you'd need to run in the `indexer-opts` folder:
+
+```
+cargo sqlx prepare
+```
+
+This will generate `sqlx-data.json` file you need to commit. Offline mode is useful for CI otherwise all usages of `sqlx::query!` macros will return errors on `cargo check`
+

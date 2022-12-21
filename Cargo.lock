@@ -1914,8 +1914,6 @@ dependencies = [
  "near-lake-framework",
  "sqlx",
  "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]
