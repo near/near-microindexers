@@ -22,6 +22,13 @@ This lib is a shared `clap::Parser` instance that defines CLI arguments for all 
 - `port` | Default: 3000 Port to enable metrics/health service
 - `start-mode` | Default: "from-interruption" Start mode for instance (`from-interruption`, `from-latest`)
 
+#### AWS Credentials env vars
+
+AWS Credentials can be passed either via env vars or via special file `~/.aws/credentials` see https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
 #### Using environment variables
 
 Every parameter can be passed through the environment variable
@@ -29,6 +36,8 @@ Every parameter can be passed through the environment variable
 Example:
 
 ```
+AWS_ACCESS_KEY_ID=YOUR-ACCESS-KEY
+AWS_SECRET_ACCESS_KEY=YOUR-SECRET-KEY
 INDEXER_ID=indexer-events-tip
 INDEXER_TYPE=indexer-events
 START_BLOCK_HEIGHT=0

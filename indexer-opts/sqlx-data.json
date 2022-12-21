@@ -10,21 +10,6 @@
     },
     "query": "\nCREATE TABLE IF NOT EXISTS __meta (\n    indexer_id                  text            PRIMARY KEY,\n    indexer_type                text            NOT NULL,\n    indexer_started_at          timestamptz     NOT NULL,\n    last_processed_block_height numeric(20, 0)  NOT NULL,\n    start_block_height          numeric(20, 0)  NOT NULL,\n    end_block_height            numeric(20,0 )\n)\n        "
   },
-  "234cdb50ade539052aeabdb19d7f5657b74324e2e97becb12ed90c1c0c3fa549": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Varchar",
-          "Text",
-          "Numeric",
-          "Numeric"
-        ]
-      }
-    },
-    "query": "\nINSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height, end_block_height)\nVALUES ($1, $2, now(), $3, $3, $4)\nON CONFLICT (indexer_id) DO UPDATE\n    SET start_block_height = EXCLUDED.start_block_height,\n        last_processed_block_height = EXCLUDED.start_block_height,\n        end_block_height = EXCLUDED.end_block_height,\n        indexer_started_at = now()\n    WHERE __meta.indexer_id = EXCLUDED.indexer_id\n                "
-  },
   "8ed7740c080a02e89b4bca92fe47e4bccdab67f2b19bc3b29c58d50e99ffd9ec": {
     "describe": {
       "columns": [],
@@ -57,5 +42,20 @@
       }
     },
     "query": "\nSELECT last_processed_block_height FROM __meta WHERE indexer_id = $1\n        "
+  },
+  "f78d58dd7e60e427516292fea02284050141180669b5a813ea400549192e9a72": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Text",
+          "Numeric",
+          "Numeric"
+        ]
+      }
+    },
+    "query": "\nINSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height, end_block_height)\nVALUES ($1, $2, now(), $3, $3, $4)\nON CONFLICT (indexer_id) DO UPDATE\n    SET start_block_height = EXCLUDED.start_block_height,\n        end_block_height = EXCLUDED.end_block_height\n    WHERE __meta.indexer_id = EXCLUDED.indexer_id\n                "
   }
 }

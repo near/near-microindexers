@@ -133,8 +133,7 @@ INSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed
 VALUES ($1, $2, now(), $3, $3, $4)
 ON CONFLICT (indexer_id) DO UPDATE
     SET start_block_height = EXCLUDED.start_block_height,
-        end_block_height = EXCLUDED.end_block_height,
-        indexer_started_at = now()
+        end_block_height = EXCLUDED.end_block_height
     WHERE __meta.indexer_id = EXCLUDED.indexer_id
                 "#,
                 indexer_id,
@@ -162,22 +161,16 @@ impl Opts {
 
         let start_block_height = match self.start_mode {
             StartMode::FromLatest => {
-                latest_block_height(self.rpc_url.as_ref().unwrap_or_else(|| {
-                    panic!("`rpc-url` must be provided for `--start-mode from-lastest")
-                }))
-                .await
+                fetch_latest_block_height_from_rpc(
+                    self.rpc_url
+                        .as_ref()
+                        .expect("`rpc-url` must be provided for `--start-mode from-lastest"),
+                )
+                .await?
             }
             StartMode::FromInterruption => {
-                match last_processed_block_height(&self.indexer_id, db_with_meta_data_pool).await {
-                    Ok(last_processed_block_height) => last_processed_block_height,
-                    Err(err) => {
-                        tracing::warn!(
-                            "Failed to fetch `last_processed_block_height` from meta data. Falling back to provided `start_block_height`\n{:#?}",
-                            err,
-                        );
-                        self.start_block_height.unwrap_or_else(|| panic!("`__meta` for INDEXER ID {} doesn't exist `start-from-block-height` must be provided", self.indexer_id))
-                    }
-                }
+                fetch_last_processed_block_height_from_db(&self.indexer_id, db_with_meta_data_pool)
+                    .await?
             }
         };
 
@@ -190,21 +183,18 @@ impl Opts {
     }
 }
 
-async fn latest_block_height(rpc_url: &str) -> u64 {
+async fn fetch_latest_block_height_from_rpc(rpc_url: &str) -> anyhow::Result<u64> {
     let client = JsonRpcClient::connect(rpc_url);
     let request = methods::block::RpcBlockRequest {
         block_reference: BlockReference::Finality(Finality::Final),
     };
 
-    let latest_block = client
-        .call(request)
-        .await
-        .unwrap_or_else(|_| panic!("Failed to fetch final block from RPC {}", rpc_url));
+    let latest_block = client.call(request).await?;
 
-    latest_block.header.height
+    Ok(latest_block.header.height)
 }
 
-async fn last_processed_block_height(
+async fn fetch_last_processed_block_height_from_db(
     indexer_id: &str,
     pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> anyhow::Result<u64> {
