@@ -6,6 +6,8 @@ rust-version = "1.64"
 
 [dependencies]
 anyhow = "1.0.51"
+aws-types = "0.13.0"
+aws-sdk-s3 = "0.13.0"
 bigdecimal = { version = "0.2", features = ["serde"] }
 clap = { version = "3.0.0-beta.5", features = ["color", "derive", "env"] }
 near-lake-framework = "0.6.0"

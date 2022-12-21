@@ -1906,6 +1906,8 @@ name = "indexer-opts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aws-sdk-s3",
+ "aws-types",
  "bigdecimal",
  "clap",
  "near-jsonrpc-client",

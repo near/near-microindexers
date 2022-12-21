@@ -27,12 +27,24 @@ pub struct Opts {
     /// Sets the micro-indexer instance ID (for reading/writing indexer meta-data)
     #[clap(long, env)]
     pub indexer_id: String,
+    /// Sets the micro-indexer instance type (for reading/writing indexer meta-data)
+    #[clap(long, env)]
+    pub indexer_type: String,
+    /// AWS Access Key with the rights to read from AWS S3
+    #[clap(long, env)]
+    pub lake_aws_access_key: String,
+    #[clap(long, env)]
+    /// AWS Secret Access Key with the rights to read from AWS S3
+    pub lake_aws_secret_access_key: String,
     /// Block height to start the stream from
     #[clap(long, short, env)]
-    pub start_block_height: u64,
-    /// NEAR JSON RPC url
+    pub start_block_height: Option<u64>,
+    /// Block to stop indexing at
     #[clap(long, short, env)]
-    pub near_archival_rpc_url: String,
+    pub end_block_height: Option<u64>,
+    /// NEAR JSON RPC URL
+    #[clap(long, short, env)]
+    pub rpc_url: Option<String>,
     // Chain ID: testnet or mainnet, used for NEAR Lake initialization
     #[clap(long, env)]
     pub chain_id: ChainId,
@@ -63,6 +75,7 @@ pub enum StartMode {
 pub enum MetaAction {
     RegisterIndexer {
         indexer_id: String,
+        indexer_type: String,
         start_block_height: u64,
     },
     UpdateMeta {
@@ -87,7 +100,7 @@ pub async fn update_meta(
                 };
             match sqlx::query!(
                 r#"
-UPDATE meta SET last_processed_block_height = $1 WHERE indexer_id = $2
+UPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2
                 "#,
                 block_height,
                 indexer_id,
@@ -109,8 +122,10 @@ UPDATE meta SET last_processed_block_height = $1 WHERE indexer_id = $2
         }
         MetaAction::RegisterIndexer {
             indexer_id,
+            indexer_type,
             start_block_height,
         } => {
+            apply_migration(&db_with_meta_data_pool).await?;
             let block_height: bigdecimal::BigDecimal =
                 match bigdecimal::BigDecimal::from_u64(start_block_height) {
                     Some(value) => value,
@@ -118,10 +133,11 @@ UPDATE meta SET last_processed_block_height = $1 WHERE indexer_id = $2
                 };
             if (sqlx::query!(
                 r#"
-INSERT INTO meta (indexer_id, last_processed_block_height, start_block_height)
-VALUES ($1, $2, $2)
+INSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height)
+VALUES ($1, $2, now(), $3, $3)
                 "#,
                 indexer_id,
+                indexer_type,
                 block_height,
             )
             .execute(db_with_meta_data_pool)
@@ -130,7 +146,7 @@ VALUES ($1, $2, $2)
             {
                 match sqlx::query!(
                     r#"
-UPDATE meta SET start_block_height = $1, last_processed_block_height = $1 WHERE indexer_id = $2
+UPDATE __meta SET start_block_height = $1, last_processed_block_height = $1 WHERE indexer_id = $2
                     "#,
                     block_height,
                     indexer_id,
@@ -201,15 +217,22 @@ impl Opts {
     // returns a Lake Config object where AWS credentials are sourced from .env file first, and then from .aws/credentials if not found.
     // https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html
     pub async fn to_lake_config(
-        &self,
+        &'static self,
         db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
     ) -> anyhow::Result<near_lake_framework::LakeConfig> {
-        let config_builder = near_lake_framework::LakeConfigBuilder::default();
+        let s3_config = aws_sdk_s3::config::Builder::from(&self.lake_aws_sdk_config()).build();
+
+        let config_builder = near_lake_framework::LakeConfigBuilder::default().s3_config(s3_config);
 
         tracing::info!(target: LOGGING_PREFIX, "CHAIN_ID: {:?}", self.chain_id);
 
         let start_block_height = match self.start_mode {
-            StartMode::FromLatest => final_block_height(&self.near_archival_rpc_url).await,
+            StartMode::FromLatest => {
+                final_block_height(self.rpc_url.as_ref().unwrap_or_else(|| {
+                    panic!("`rpc-url` must be provided for `--start-mode from-lastest")
+                }))
+                .await
+            }
             StartMode::FromInterruption => {
                 match last_processed_block_height(&self.indexer_id, db_with_meta_data_pool).await {
                     Ok(last_processed_block_height) => last_processed_block_height,
@@ -219,7 +242,7 @@ impl Opts {
                             "Failed to fetch `last_processed_block_height` from meta data. Falling back to provided `start_block_height`\n{:#?}",
                             err,
                         );
-                        self.start_block_height
+                        self.start_block_height.unwrap_or_else(|| panic!("`__meta` for INDEXER ID {} doesn't exist `start-from-block-height` must be provided", self.indexer_id))
                     }
                 }
             }
@@ -231,6 +254,26 @@ impl Opts {
         }
         .start_block_height(start_block_height)
         .build()?)
+    }
+
+    // Creates AWS Credentials for NEAR Lake
+    fn lake_credentials(&'static self) -> aws_types::credentials::SharedCredentialsProvider {
+        let provider = aws_types::Credentials::new(
+            self.lake_aws_access_key.clone(),
+            self.lake_aws_secret_access_key.clone(),
+            None,
+            None,
+            &self.indexer_id,
+        );
+        aws_types::credentials::SharedCredentialsProvider::new(provider)
+    }
+
+    // Creates AWS Shared Config for NEAR Lake
+    fn lake_aws_sdk_config(&'static self) -> aws_types::sdk_config::SdkConfig {
+        aws_types::sdk_config::SdkConfig::builder()
+            .credentials_provider(self.lake_credentials())
+            .region(aws_types::region::Region::new("eu-central-1"))
+            .build()
     }
 }
 
@@ -284,7 +327,7 @@ async fn last_processed_block_height(
 ) -> anyhow::Result<u64> {
     let record = sqlx::query!(
         r#"
-SELECT last_processed_block_height FROM meta WHERE indexer_id = $1 LIMIT 1
+SELECT last_processed_block_height FROM __meta WHERE indexer_id = $1 LIMIT 1
         "#,
         indexer_id,
     )
@@ -295,4 +338,21 @@ SELECT last_processed_block_height FROM meta WHERE indexer_id = $1 LIMIT 1
         .last_processed_block_height
         .to_u64()
         .ok_or_else(|| anyhow::anyhow!("Failed to convert `last_processed_block_height` to u64"))
+}
+
+async fn apply_migration(db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>) -> anyhow::Result<()> {
+    sqlx::query!(
+        r#"
+CREATE TABLE IF NOT EXISTS __meta (
+    indexer_id                  text            PRIMARY KEY,
+    indexer_type                text            NOT NULL,
+    indexer_started_at          timestamptz     NOT NULL,
+    last_processed_block_height numeric(20, 0)  NOT NULL,
+    start_block_height          numeric(20, 0)  NOT NULL
+)
+        "#
+    )
+    .execute(db_with_meta_data_pool)
+    .await?;
+    Ok(())
 }

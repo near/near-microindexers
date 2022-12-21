@@ -1,6 +1,6 @@
 {
   "db": "PostgreSQL",
-  "44dc838314bd40035cce4d8697ce341ce2651b580d386fc5f0244044ccd6fffc": {
+  "32180687a83ae322def4a1f050b21df12af12dc7818a2cb3eba29b9e294d8402": {
     "describe": {
       "columns": [],
       "nullable": [],
@@ -11,9 +11,33 @@
         ]
       }
     },
-    "query": "\nUPDATE meta SET start_block_height = $1, last_processed_block_height = $1 WHERE indexer_id = $2\n                    "
+    "query": "\nUPDATE __meta SET start_block_height = $1, last_processed_block_height = $1 WHERE indexer_id = $2\n                    "
   },
-  "5809d70d52298f798f086c95a2d70494a5b9d6bfb6b6943b1f1f3e15c360fbdb": {
+  "5ce34cda52a7f85a2529c0e1c23091e43986d0dd3fc876aecfbf92059d73e9b6": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "\nCREATE TABLE IF NOT EXISTS __meta (\n    indexer_id                  text            PRIMARY KEY,\n    indexer_type                text            NOT NULL,\n    indexer_started_at          timestamptz     NOT NULL,\n    last_processed_block_height numeric(20, 0)  NOT NULL,\n    start_block_height          numeric(20, 0)  NOT NULL\n)\n        "
+  },
+  "6b8e325869fbe0e5fe649145e580ea13779a015f8655467f4c707f8cdbb5eea4": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Text",
+          "Numeric"
+        ]
+      }
+    },
+    "query": "\nINSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height)\nVALUES ($1, $2, now(), $3, $3)\n                "
+  },
+  "8ed7740c080a02e89b4bca92fe47e4bccdab67f2b19bc3b29c58d50e99ffd9ec": {
     "describe": {
       "columns": [],
       "nullable": [],
@@ -24,9 +48,9 @@
         ]
       }
     },
-    "query": "\nUPDATE meta SET last_processed_block_height = $1 WHERE indexer_id = $2\n                "
+    "query": "\nUPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2\n                "
   },
-  "6246724cf625ab9c739a272960bf680fc66658579ecc2f617639aefc63200645": {
+  "9c37c7131df3bef3ef2c7008387589af1c785660deda7e184814da78d949b2d8": {
     "describe": {
       "columns": [
         {
@@ -44,19 +68,6 @@
         ]
       }
     },
-    "query": "\nSELECT last_processed_block_height FROM meta WHERE indexer_id = $1 LIMIT 1\n        "
-  },
-  "65a8ea08c223e106d7cdc96d9f419107d69615c7648691159df8ae257a30bdda": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Varchar",
-          "Numeric"
-        ]
-      }
-    },
-    "query": "\nINSERT INTO meta (indexer_id, last_processed_block_height, start_block_height)\nVALUES ($1, $2, $2)\n                "
+    "query": "\nSELECT last_processed_block_height FROM __meta WHERE indexer_id = $1 LIMIT 1\n        "
   }
 }
