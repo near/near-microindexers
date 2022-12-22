@@ -60,90 +60,35 @@ pub enum StartMode {
     FromInterruption,
 }
 
-#[derive(Debug)]
-pub enum MetaAction {
-    RegisterIndexer {
-        indexer_id: String,
-        indexer_type: String,
-        start_block_height: u64,
-        end_block_height: Option<u64>,
-    },
-    UpdateMeta {
-        indexer_id: String,
-        last_processed_block_height: u64,
-    },
-}
-
 pub async fn update_meta(
     db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
-    action: MetaAction,
+    indexer_id: &str,
+    last_processed_block_height: u64,
 ) -> anyhow::Result<()> {
-    match action {
-        MetaAction::UpdateMeta {
-            indexer_id,
-            last_processed_block_height,
-        } => {
-            let block_height: bigdecimal::BigDecimal =
-                match bigdecimal::BigDecimal::from_u64(last_processed_block_height) {
-                    Some(value) => value,
-                    None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
-                };
-            match sqlx::query!(
-                r#"
-UPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2
-                "#,
-                block_height,
-                indexer_id,
-            )
-            .execute(db_with_meta_data_pool)
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(err) => {
-                    tracing::warn!(
-                        "Failed to update meta for INDEXER ID {}\n{:#?}",
-                        indexer_id,
-                        err,
-                    );
-                    anyhow::bail!(err)
-                }
-            }
-        }
-        MetaAction::RegisterIndexer {
-            indexer_id,
-            indexer_type,
-            start_block_height,
-            end_block_height,
-        } => {
-            apply_migration(db_with_meta_data_pool).await?;
-            let block_height: bigdecimal::BigDecimal =
-                match bigdecimal::BigDecimal::from_u64(start_block_height) {
-                    Some(value) => value,
-                    None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
-                };
-            let end_block_height = if let Some(end_block_height) = end_block_height {
-                bigdecimal::BigDecimal::from_u64(end_block_height)
-            } else {
-                None
-            };
+    let block_height: bigdecimal::BigDecimal =
+        match bigdecimal::BigDecimal::from_u64(last_processed_block_height) {
+            Some(value) => value,
+            None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
+        };
 
-            sqlx::query!(
-                r#"
-INSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height, end_block_height)
-VALUES ($1, $2, now(), $3, $3, $4)
-ON CONFLICT (indexer_id) DO UPDATE
-    SET start_block_height = EXCLUDED.start_block_height,
-        end_block_height = EXCLUDED.end_block_height
-    WHERE __meta.indexer_id = EXCLUDED.indexer_id
-                "#,
+    match sqlx::query!(
+        r#"
+UPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2
+        "#,
+        block_height,
+        indexer_id,
+    )
+    .execute(db_with_meta_data_pool)
+    .await
+    {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            tracing::warn!(
+                "Failed to update meta for INDEXER ID {}\n{:#?}",
                 indexer_id,
-                indexer_type,
-                block_height,
-                end_block_height,
-            )
-            .execute(db_with_meta_data_pool)
-            .await?;
-            Ok(())
+                err,
+            );
+            Err(anyhow::anyhow!(err))
         }
     }
 }
@@ -152,7 +97,7 @@ impl Opts {
     // returns a Lake Config object where AWS credentials are sourced from .env file first, and then from .aws/credentials if not found.
     // https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html
     pub async fn to_lake_config(
-        &'static self,
+        &self,
         db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
     ) -> anyhow::Result<near_lake_framework::LakeConfig> {
         let config_builder = near_lake_framework::LakeConfigBuilder::default();
@@ -161,14 +106,31 @@ impl Opts {
 
         let start_block_height = match self.start_mode {
             StartMode::FromLatest => {
-                fetch_latest_block_height_from_rpc(
+                let start_block_height_from_rpc = fetch_latest_block_height_from_rpc(
                     self.rpc_url
                         .as_ref()
                         .expect("`rpc-url` must be provided for `--start-mode from-lastest"),
                 )
-                .await?
+                .await?;
+                register_indexer(
+                    db_with_meta_data_pool,
+                    &self.indexer_id,
+                    &self.indexer_type,
+                    start_block_height_from_rpc,
+                    None,
+                )
+                .await?;
+                start_block_height_from_rpc
             }
             StartMode::FromInterruption => {
+                register_indexer(
+                    db_with_meta_data_pool,
+                    &self.indexer_id,
+                    &self.indexer_type,
+                    self.start_block_height
+                        .expect("`start-block-height` must be provided to use `start-mode from-interruption`"),
+                    self.start_block_height,
+                ).await?;
                 fetch_last_processed_block_height_from_db(&self.indexer_id, db_with_meta_data_pool)
                     .await?
             }
@@ -181,6 +143,44 @@ impl Opts {
         .start_block_height(start_block_height)
         .build()?)
     }
+}
+
+async fn register_indexer(
+    db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
+    indexer_id: &str,
+    indexer_type: &str,
+    start_block_height: u64,
+    end_block_height: Option<u64>,
+) -> anyhow::Result<()> {
+    apply_migration(db_with_meta_data_pool).await?;
+    let block_height: bigdecimal::BigDecimal =
+        match bigdecimal::BigDecimal::from_u64(start_block_height) {
+            Some(value) => value,
+            None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
+        };
+    let end_block_height = if let Some(end_block_height) = end_block_height {
+        bigdecimal::BigDecimal::from_u64(end_block_height)
+    } else {
+        None
+    };
+
+    sqlx::query!(
+        r#"
+INSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height, end_block_height)
+VALUES ($1, $2, now(), $3, $3, $4)
+ON CONFLICT (indexer_id) DO UPDATE
+    SET start_block_height = EXCLUDED.start_block_height,
+        end_block_height = EXCLUDED.end_block_height
+    WHERE __meta.indexer_id = EXCLUDED.indexer_id
+        "#,
+        indexer_id,
+        indexer_type,
+        block_height,
+        end_block_height,
+    )
+    .execute(db_with_meta_data_pool)
+    .await?;
+    Ok(())
 }
 
 async fn fetch_latest_block_height_from_rpc(rpc_url: &str) -> anyhow::Result<u64> {
