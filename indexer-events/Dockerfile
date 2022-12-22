@@ -2,11 +2,13 @@ FROM rust:1.64 AS builder
 WORKDIR /tmp/
 
 # this build step will cache your dependencies
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && touch src/lib.rs && cargo build --release && rm -r src
+COPY Cargo.lock ./
+RUN echo '[workspace]\nmembers = ["indexer-events"]' > Cargo.toml
+COPY indexer-events/Cargo.toml indexer-events/Cargo.toml
+RUN mkdir indexer-events/src && touch indexer-events/src/lib.rs && cargo build --release && rm -r indexer-events/src
 
 # copy your source tree
-COPY ./src ./src
+COPY ./indexer-events/src ./indexer-events/src
 
 # build for release
 RUN cargo build --release
