@@ -12,5 +12,5 @@ bigdecimal = { version = "0.2", features = ["serde"] }
 clap = { version = "3.0.0-beta.5", features = ["color", "derive", "env"] }
 near-lake-framework = "0.6.0"
 near-jsonrpc-client = "0.4.0-beta.0"
-sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres", "bigdecimal", "offline"] }
+sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres", "bigdecimal"] }
 tracing = "0.1.35"

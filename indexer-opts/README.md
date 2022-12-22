@@ -127,24 +127,3 @@ This will start indexer with ID `indexer-events-tip` and type `indexer-events` f
 ```
 
 This will start indexer with ID `indexer-events-tip` and type `indexer-events` for `mainnet` from the block height `100 000 000`. If it is restarted it will start from the block it was stopped. **Won't skip blocks** unless something wrong with the `__meta` table of the database.
-
-## Contributing
-
-Please note that this crate uses `sqlx` with a feature `offline` for offline checks https://docs.rs/sqlx/0.6.2/sqlx/macro.query.html#offline-mode-requires-the-offline-feature
-
-Read more https://github.com/launchbadge/sqlx/tree/main/sqlx-cli#enable-building-in-offline-mode-with-query
-
-Install `sqlx-cli`
-
-```
-$ cargo install sqlx-cli --no-default-features --features postgres
-```
-
-Basically if you change anything in the `__meta` schema you'd need to run in the `indexer-opts` folder:
-
-```
-cargo sqlx prepare
-```
-
-This will generate `sqlx-data.json` file you need to commit. Offline mode is useful for CI otherwise all usages of `sqlx::query!` macros will return errors on `cargo check`
-

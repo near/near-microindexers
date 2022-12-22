@@ -77,6 +77,7 @@ pub async fn update_meta(
     db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
     indexer_id: &str,
     last_processed_block_height: u64,
+    tracing_target: &str,
 ) -> anyhow::Result<()> {
     let block_height: bigdecimal::BigDecimal =
         match bigdecimal::BigDecimal::from_u64(last_processed_block_height) {
@@ -85,8 +86,9 @@ pub async fn update_meta(
         };
 
     match sqlx::query!(
-        r#"
-UPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2
+        r#"UPDATE __meta
+           SET last_processed_block_height = $1
+           WHERE indexer_id = $2 AND last_processed_block_height < $1
         "#,
         block_height,
         indexer_id,
@@ -97,11 +99,12 @@ UPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2
         Ok(_) => Ok(()),
         Err(err) => {
             tracing::warn!(
+                tracing_target,
                 "Failed to update meta for INDEXER ID {}\n{:#?}",
                 indexer_id,
                 err,
             );
-            Err(anyhow::anyhow!(err))
+            anyhow::bail!(err)
         }
     }
 }
@@ -116,14 +119,12 @@ impl Opts {
     ) -> anyhow::Result<near_lake_framework::LakeConfig> {
         let config_builder = near_lake_framework::LakeConfigBuilder::default();
 
-        tracing::info!("CHAIN_ID: {:?}", self.chain_id);
-
         let start_block_height = match self.start_mode {
             StartMode::FromLatest => {
                 let start_block_height_from_rpc = fetch_latest_block_height_from_rpc(
                     self.rpc_url
                         .as_ref()
-                        .expect("`rpc-url` must be provided for `--start-mode from-lastest"),
+                        .expect("`rpc-url` must be provided for `--start-mode from-latest"),
                 )
                 .await?;
                 register_indexer(
@@ -145,8 +146,10 @@ impl Opts {
                         .expect("`start-block-height` must be provided to use `start-mode from-interruption`"),
                     None,
                 ).await?;
+                // Starting slightly before the interruption to be sure we haven't missed anything
                 fetch_last_processed_block_height_from_db(&self.indexer_id, db_with_meta_data_pool)
                     .await?
+                    .saturating_sub(100)
             }
         };
 
