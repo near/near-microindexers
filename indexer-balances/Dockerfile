@@ -3,7 +3,8 @@ WORKDIR /tmp/
 
 # this build step will cache your dependencies
 COPY Cargo.lock ./
-RUN echo '[workspace]\nmembers = ["indexer-balances"]' > Cargo.toml
+RUN echo '[workspace]\nmembers = ["indexer-balances", "indexer-opts"]' > Cargo.toml
+COPY indexer-opts ./indexer-opts
 COPY indexer-balances/Cargo.toml indexer-balances/Cargo.toml
 RUN mkdir indexer-balances/src && touch indexer-balances/src/lib.rs && cargo build --release && rm -r indexer-balances/src
 
