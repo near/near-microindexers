@@ -49,8 +49,8 @@ impl Opts {
                 invalid_chain
             ),
         }
-            .start_block_height(start_block_height)
-            .build()
-            .expect("Failed to build LakeConfig")
+        .start_block_height(start_block_height)
+        .build()
+        .expect("Failed to build LakeConfig")
     }
 }

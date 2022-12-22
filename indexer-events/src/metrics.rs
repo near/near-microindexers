@@ -54,15 +54,14 @@ async fn get_metrics() -> impl Responder {
     }
 }
 
-pub(crate) async fn init_metrics_server(port: u16) -> anyhow::Result<()> {
+pub(crate) fn init_server(port: u16) -> anyhow::Result<actix_web::dev::Server> {
     tracing::info!(
         target: LOGGING_PREFIX,
         "Starting metrics server on http://0.0.0.0:{port}/metrics"
     );
 
-    HttpServer::new(|| App::new().service(get_metrics))
+    Ok(HttpServer::new(|| App::new().service(get_metrics))
         .bind(("0.0.0.0", port))?
-        .run()
-        .await
-        .map_err(|e| anyhow::anyhow!("Error while executing HTTP Server: {}", e))
+        .disable_signals()
+        .run())
 }

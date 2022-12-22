@@ -1,6 +1,6 @@
+use near_lake_framework::near_indexer_primitives;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use near_lake_framework::near_indexer_primitives;
 
 /// We want to store permission field more explicitly so we are making copy of nearcore struct
 /// to change serde parameters of serialization.
