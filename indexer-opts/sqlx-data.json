@@ -1,5 +1,20 @@
 {
   "db": "PostgreSQL",
+  "126069a172fd2f9fbff6711c977e4a69e32d6958f025f9f50751cf9694d4ca82": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Text",
+          "Numeric",
+          "Numeric"
+        ]
+      }
+    },
+    "query": "\nINSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height, end_block_height)\nVALUES ($1, $2, now(), $3, $3, $4)\nON CONFLICT (indexer_id) DO UPDATE\n    SET start_block_height = EXCLUDED.start_block_height,\n        end_block_height = EXCLUDED.end_block_height\n    WHERE __meta.indexer_id = EXCLUDED.indexer_id\n        "
+  },
   "2280c39bed02adf07fd975b8e9846454211c6943ad38ee0991d964d6e7531f33": {
     "describe": {
       "columns": [],
@@ -10,7 +25,7 @@
     },
     "query": "\nCREATE TABLE IF NOT EXISTS __meta (\n    indexer_id                  text            PRIMARY KEY,\n    indexer_type                text            NOT NULL,\n    indexer_started_at          timestamptz     NOT NULL,\n    last_processed_block_height numeric(20, 0)  NOT NULL,\n    start_block_height          numeric(20, 0)  NOT NULL,\n    end_block_height            numeric(20,0 )\n)\n        "
   },
-  "8ed7740c080a02e89b4bca92fe47e4bccdab67f2b19bc3b29c58d50e99ffd9ec": {
+  "781d6d86339ec8d1eb1a9d1d9c35a8471b11a5cfe982a30aa74ab9d2d6ed5bc7": {
     "describe": {
       "columns": [],
       "nullable": [],
@@ -21,7 +36,7 @@
         ]
       }
     },
-    "query": "\nUPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2\n                "
+    "query": "\nUPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2\n        "
   },
   "f293e4e1745f11d6f0361025cf36dc2c6fa692bbdd65e0b47287ac47b2f9b2ea": {
     "describe": {
@@ -42,20 +57,5 @@
       }
     },
     "query": "\nSELECT last_processed_block_height FROM __meta WHERE indexer_id = $1\n        "
-  },
-  "f78d58dd7e60e427516292fea02284050141180669b5a813ea400549192e9a72": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Varchar",
-          "Text",
-          "Numeric",
-          "Numeric"
-        ]
-      }
-    },
-    "query": "\nINSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height, end_block_height)\nVALUES ($1, $2, now(), $3, $3, $4)\nON CONFLICT (indexer_id) DO UPDATE\n    SET start_block_height = EXCLUDED.start_block_height,\n        end_block_height = EXCLUDED.end_block_height\n    WHERE __meta.indexer_id = EXCLUDED.indexer_id\n                "
   }
 }

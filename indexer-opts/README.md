@@ -84,6 +84,8 @@ Add the code to update meta after processing each block (usually in the and of `
 
 ```rust
 // Update __meta with the last_processed_block_height for this indexer by its ID
+// Depending on the needs you might call after every processed block or each N blocks
+// implementation should be done on the indexer side.
 //
 // async fn handle_streamer_message(
 //     streamer_message: near_indexer_primitives::StreamerMessage,
@@ -92,23 +94,12 @@ Add the code to update meta after processing each block (usually in the and of `
 //     indexer_id: &str,
 //     chain_id: &indexer_opts::ChainId,
 // ) -> anyhow::Result<u64> {
-match indexer_opts::update_meta(
+let _ = indexer_opts::update_meta(
     &pool,
     indexer_id,
     streamer_message.block.header.height,
 )
-.await
-{
-    Ok(_) => {}
-    Err(err) => {
-        tracing::warn!(
-            target: crate::LOGGING_PREFIX,
-            "Failed to update meta for INDEXER ID {}\n{:#?}",
-            indexer_id,
-            err,
-        );
-    }
-};
+.await;
 ```
 
 ### Example
