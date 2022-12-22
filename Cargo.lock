@@ -1899,6 +1899,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexer-opts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aws-sdk-s3",
+ "aws-types",
+ "bigdecimal",
+ "clap",
+ "near-jsonrpc-client",
+ "near-lake-framework",
+ "sqlx",
+ "tracing",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
