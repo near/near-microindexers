@@ -73,21 +73,11 @@ let opts = Opts::parse();
 // create database connection pool
 let pool = sqlx::PgPool::connect(&opts.database_url).await?;
 
-// Register indexer
-// it will try to insert the record about this indexer with
-// its ID and TYPE and the block it is starting from.
-// If the __meta table doesn't exist it will create it.
-// If this indexer is already registered it will update the
-// start_block_height in the __meta table
-indexer_opts::update_meta(
-    &pool,
-    indexer_opts::MetaAction::RegisterIndexer {
-        indexer_id: opts.indexer_id.to_string(),
-        indexer_type: opts.indexer_type.to_string(),
-        start_block_height: opts.start_block_height,
-    },
-)
-.await?;
+// An attempt to create `__meta` table in the the database (`pool`) will be performed implicitly
+// the call of `opts.to_lake_config(&pool).await
+let config: near_lake_framework::LakeConfig = opts.to_lake_config(&pool).await?;
+// Also the registration of the indexer will be performed implicitly.
+// After that a record in the `__meta` will appear for the indexer with `opt.sindexer_id` and `opts.indexer_type`
 ```
 
 Add the code to update meta after processing each block (usually in the and of `handle_streamer_message` function)
@@ -104,10 +94,8 @@ Add the code to update meta after processing each block (usually in the and of `
 // ) -> anyhow::Result<u64> {
 match indexer_opts::update_meta(
     &pool,
-    indexer_opts::MetaAction::UpdateMeta {
-        indexer_id: indexer_id.to_string(),
-        last_processed_block_height: streamer_message.block.header.height,
-    },
+    indexer_id,
+    streamer_message.block.header.height,
 )
 .await
 {
