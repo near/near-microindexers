@@ -3,7 +3,7 @@ use tracing_subscriber::EnvFilter;
 pub(crate) fn init_tracing(
     debug: bool,
 ) -> anyhow::Result<tracing_appender::non_blocking::WorkerGuard> {
-    let mut env_filter = EnvFilter::new("indexer_events=info");
+    let mut env_filter = EnvFilter::new("indexer_events=info,indexer=info");
 
     if debug {
         env_filter = env_filter.add_directive("near_lake_framework=debug".parse()?);

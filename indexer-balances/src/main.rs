@@ -1,8 +1,7 @@
 // // TODO cleanup imports in all the files in the end
 use cached::SizedCache;
-use clap::Parser;
-use configs::{init_tracing, Opts};
 use futures::StreamExt;
+use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
 use tokio::sync::Mutex;
 
@@ -38,65 +37,57 @@ pub type BalanceCache =
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
+    let opts = indexer_opts::Opts::parse();
+    let _worker_guard = configs::init_tracing(opts.debug)?;
 
-    let opts = Opts::parse();
-    let _worker_guard = init_tracing(opts.debug)?;
+    let rpc_url = opts
+        .rpc_url
+        .as_ref()
+        .expect("RPC_URL is required to run indexer-balances");
+    let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
 
-    let pool = sqlx::PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
-    // TODO Error: while executing migrations: error returned from database: 1128 (HY000): Function 'near_indexer.GET_LOCK' is not defined
-    // sqlx::migrate!().run(&pool).await?;
+    let pool = sqlx::PgPool::connect(&opts.database_url).await?;
+    let lake_config = opts.to_lake_config(&pool).await?;
+    let (_lake_handle, stream) = near_lake_framework::streamer(lake_config);
+    let end_block_height = opts.end_block_height.unwrap_or(u64::MAX);
 
-    let start_block_height = match opts.start_block_height {
-        Some(x) => x,
-        None => models::start_after_interruption(&pool).await?,
-    };
-    tracing::info!(
-        target: LOGGING_PREFIX,
-        "Indexer will start from block {}",
-        start_block_height
-    );
-
-    // create a lake configuration with S3 information passed in as ENV vars
-    let config = opts.to_lake_config(start_block_height).await;
-    let (_lake_handle, stream) = near_lake_framework::streamer(config);
+    tokio::spawn(metrics::init_server(opts.port).expect("Failed to start metrics server"));
 
     // We want to prevent unnecessary RPC queries to find previous balance
     let balances_cache: BalanceCache =
         std::sync::Arc::new(Mutex::new(SizedCache::with_size(100_000)));
 
-    let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(&opts.near_archival_rpc_url);
-    tokio::spawn(async move {
-        let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
-            .map(|streamer_message| {
-                handle_streamer_message(streamer_message, &pool, &balances_cache, &json_rpc_client)
-            })
-            .buffer_unordered(1usize);
+    let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
+        .map(|streamer_message| {
+            handle_streamer_message(streamer_message, &pool, &balances_cache, &json_rpc_client)
+        })
+        .buffer_unordered(1usize);
 
-        let mut time_now = std::time::Instant::now();
-        while let Some(handle_message) = handlers.next().await {
-            match handle_message {
-                Ok(block_height) => {
-                    let elapsed = time_now.elapsed();
+    while let Some(handle_message) = handlers.next().await {
+        match handle_message {
+            Ok(block_height) => {
+                if block_height % 100 == 0 {
+                    let _ = indexer_opts::update_meta(&pool, &opts.indexer_id, block_height).await;
+                }
+                if block_height > end_block_height {
+                    let _ = indexer_opts::update_meta(&pool, &opts.indexer_id, block_height).await;
                     tracing::info!(
                         target: LOGGING_PREFIX,
-                        "Elapsed time spent on block {}: {:.3?}",
-                        block_height,
-                        elapsed
+                        "Congrats! Stop indexing because we reached end_block_height {}",
+                        end_block_height
                     );
-                    time_now = std::time::Instant::now();
-                }
-                Err(e) => {
-                    tracing::error!(target: LOGGING_PREFIX, "Stop indexing due to {}", e);
-                    // we do not catch this error anywhere, this thread is just stopped with error,
-                    // main thread continues serving metrics
-                    anyhow::bail!(e)
+                    break;
                 }
             }
+            Err(e) => {
+                tracing::error!(target: LOGGING_PREFIX, "Stop indexing due to {}", e);
+                // we do not catch this error anywhere, this thread is just stopped with error,
+                // main thread continues serving metrics
+                anyhow::bail!(e)
+            }
         }
-        Ok(()) // unreachable statement, loop above is endless
-    });
-
-    metrics::init_metrics_server(opts.port).await
+    }
+    Ok(())
 }
 
 async fn handle_streamer_message(

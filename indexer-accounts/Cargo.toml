@@ -13,8 +13,6 @@ avro-rs = "0.13.0"
 base64 = "0.11"
 bigdecimal = { version = "0.2", features = ["serde"] }
 cached = "0.23.0"
-clap = { version = "3.0.0-beta.5", features = ["color", "derive", "env"] }
-dotenv = "0.15.0"
 futures = "0.3.5"
 hex = "0.4"
 itertools = "0.9.0"
@@ -33,3 +31,5 @@ quote = "1.0.17"
 near-crypto = "0.15.0"
 near-lake-framework = "0.6.0"
 near-primitives = "0.15.0"
+
+indexer-opts = { path = "../indexer-opts" }

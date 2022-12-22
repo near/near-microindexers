@@ -1,8 +1,10 @@
-use bigdecimal::{FromPrimitive, ToPrimitive};
+use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive};
 pub use clap::{self, ArgEnum, Parser};
 
 use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_lake_framework::near_indexer_primitives::types::{BlockReference, Finality};
+
+pub(crate) const LOGGING_PREFIX: &str = "indexer";
 
 /// NEAR Indexer Opts
 /// Start options for NEAR micro indexers
@@ -41,7 +43,7 @@ pub struct Opts {
     #[clap(long, short, env, default_value_t = 3000)]
     pub port: u16,
     /// Start mode for instance
-    #[clap(long, short, env, arg_enum, default_value = "from-interruption")]
+    #[clap(long, env, arg_enum, default_value = "from-interruption")]
     pub start_mode: StartMode,
     /// Database URL
     #[clap(long, short, env)]
@@ -77,7 +79,6 @@ pub async fn update_meta(
     db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
     indexer_id: &str,
     last_processed_block_height: u64,
-    tracing_target: &str,
 ) -> anyhow::Result<()> {
     let block_height: bigdecimal::BigDecimal =
         match bigdecimal::BigDecimal::from_u64(last_processed_block_height) {
@@ -99,7 +100,7 @@ pub async fn update_meta(
         Ok(_) => Ok(()),
         Err(err) => {
             tracing::warn!(
-                tracing_target,
+                target: LOGGING_PREFIX,
                 "Failed to update meta for INDEXER ID {}\n{:#?}",
                 indexer_id,
                 err,
@@ -118,6 +119,7 @@ impl Opts {
         db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
     ) -> anyhow::Result<near_lake_framework::LakeConfig> {
         let config_builder = near_lake_framework::LakeConfigBuilder::default();
+        tracing::info!(target: LOGGING_PREFIX, "CHAIN_ID: {:?}", self.chain_id);
 
         let start_block_height = match self.start_mode {
             StartMode::FromLatest => {
@@ -132,7 +134,7 @@ impl Opts {
                     &self.indexer_id,
                     &self.indexer_type,
                     start_block_height_from_rpc,
-                    None,
+                    self.end_block_height,
                 )
                 .await?;
                 start_block_height_from_rpc
@@ -144,7 +146,7 @@ impl Opts {
                     &self.indexer_type,
                     self.start_block_height
                         .expect("`start-block-height` must be provided to use `start-mode from-interruption`"),
-                    None,
+                    self.end_block_height,
                 ).await?;
                 // Starting slightly before the interruption to be sure we haven't missed anything
                 fetch_last_processed_block_height_from_db(&self.indexer_id, db_with_meta_data_pool)
@@ -152,6 +154,12 @@ impl Opts {
                     .saturating_sub(100)
             }
         };
+
+        tracing::info!(
+            target: LOGGING_PREFIX,
+            "Indexer will start from block {}",
+            start_block_height
+        );
 
         Ok(match self.chain_id {
             ChainId::Mainnet => config_builder.mainnet(),
@@ -172,14 +180,13 @@ async fn register_indexer(
     start_block_height: u64,
     end_block_height: Option<u64>,
 ) -> anyhow::Result<()> {
-    apply_migration(db_with_meta_data_pool).await?;
-    let block_height: bigdecimal::BigDecimal =
-        match bigdecimal::BigDecimal::from_u64(start_block_height) {
-            Some(value) => value,
-            None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
-        };
+    let start_block_height = BigDecimal::from_u64(start_block_height)
+        .ok_or_else(|| anyhow::anyhow!("Failed to convert `start_block_height` to u64"))?;
     let end_block_height = if let Some(end_block_height) = end_block_height {
-        bigdecimal::BigDecimal::from_u64(end_block_height)
+        Some(
+            BigDecimal::from_u64(end_block_height)
+                .ok_or_else(|| anyhow::anyhow!("Failed to convert `end_block_height` to u64"))?,
+        )
     } else {
         None
     };
@@ -195,7 +202,7 @@ ON CONFLICT (indexer_id) DO UPDATE
         "#,
         indexer_id,
         indexer_type,
-        block_height,
+        start_block_height,
         end_block_height,
     )
     .execute(db_with_meta_data_pool)
@@ -236,27 +243,4 @@ SELECT last_processed_block_height FROM __meta WHERE indexer_id = $1
         .last_processed_block_height
         .to_u64()
         .ok_or_else(|| anyhow::anyhow!("Failed to convert `last_processed_block_height` to u64"))
-}
-
-/// Internal function to create `__meta` table in the given database.
-/// Uses `IF NOT EXISTS` to prevent redundant error.
-/// The schema of the `__meta` table is located in the function body.
-async fn apply_migration(
-    db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
-) -> anyhow::Result<()> {
-    sqlx::query!(
-        r#"
-CREATE TABLE IF NOT EXISTS __meta (
-    indexer_id                  text            PRIMARY KEY,
-    indexer_type                text            NOT NULL,
-    indexer_started_at          timestamptz     NOT NULL,
-    last_processed_block_height numeric(20, 0)  NOT NULL,
-    start_block_height          numeric(20, 0)  NOT NULL,
-    end_block_height            numeric(20,0 )
-)
-        "#
-    )
-    .execute(db_with_meta_data_pool)
-    .await?;
-    Ok(())
 }

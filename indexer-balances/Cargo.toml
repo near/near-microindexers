@@ -12,7 +12,6 @@ actix-web = "=4.0.1"
 anyhow = "1.0.51"
 bigdecimal = { version = "0.2", features = ["serde"] }
 cached = "0.23.0"
-clap = { version = "3.2.17", features = ["color", "derive", "env"] }
 dotenv = "0.15.0"
 futures = "0.3.5"
 lazy_static = "1.4.0"
@@ -31,3 +30,5 @@ near-jsonrpc-primitives = "0.15.0"
 near-jsonrpc-client = "0.4.0-beta.0"
 near-lake-framework = "0.6.0"
 near-primitives = "0.15.0"
+
+indexer-opts = { path = "../indexer-opts" }

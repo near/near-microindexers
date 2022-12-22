@@ -1,6 +1,6 @@
 // TODO cleanup imports in all the files in the end
 use futures::StreamExt;
-use indexer_opts::{Opts, Parser};
+use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
 
 mod configs;
@@ -24,10 +24,10 @@ pub struct AccountWithContract {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let opts: Opts = Opts::parse();
-    tracing::info!(target: LOGGING_PREFIX, "CHAIN_ID: {:?}", opts.chain_id);
-
+    dotenv::dotenv().ok();
+    let opts = indexer_opts::Opts::parse();
     let _worker_guard = configs::init_tracing(opts.debug)?;
+
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
     let lake_config = opts.to_lake_config(&pool).await?;
     let (_lake_handle, stream) = near_lake_framework::streamer(lake_config);
@@ -43,22 +43,10 @@ async fn main() -> anyhow::Result<()> {
         match handle_message {
             Ok(block_height) => {
                 if block_height % 100 == 0 {
-                    let _ = indexer_opts::update_meta(
-                        &pool,
-                        &opts.indexer_id,
-                        block_height,
-                        LOGGING_PREFIX,
-                    )
-                    .await;
+                    let _ = indexer_opts::update_meta(&pool, &opts.indexer_id, block_height).await;
                 }
                 if block_height > end_block_height {
-                    let _ = indexer_opts::update_meta(
-                        &pool,
-                        &opts.indexer_id,
-                        block_height,
-                        LOGGING_PREFIX,
-                    )
-                    .await;
+                    let _ = indexer_opts::update_meta(&pool, &opts.indexer_id, block_height).await;
                     tracing::info!(
                         target: LOGGING_PREFIX,
                         "Congrats! Stop indexing because we reached end_block_height {}",
