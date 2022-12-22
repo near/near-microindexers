@@ -48,18 +48,31 @@ pub struct Opts {
     pub database_url: String,
 }
 
+/// Represents the chain-id variants for indexer to stream from
 #[derive(ArgEnum, Debug, Clone, PartialEq, Eq)]
 pub enum ChainId {
     Mainnet,
     Testnet,
 }
 
+/// Represents the variants of starts mode for the indexer
+/// - FromLatest
+///  will fetch the final block from the RPC by the given `rpc-url`
+///  and then will attempt to register an indexer with given `indexer-id` and `indexer-type`
+/// - FromInterruption
+///  will register an indexer with the given `indexer-id` and `indexer-type` along with the provided
+///  `start-block-height` and then will fetch the `last_processed_block_height` to continue the stream
 #[derive(ArgEnum, Debug, Clone)]
 pub enum StartMode {
     FromLatest,
     FromInterruption,
 }
 
+/// Helper function to perform an update in `__meta` table for the given `indexer-id`
+/// with the given `last_processed_block_height`
+/// Will throw an error in cases:
+/// - database error
+/// - conversion u64 to [bigdecimal::BigDecimal] error
 pub async fn update_meta(
     db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
     indexer_id: &str,
@@ -94,8 +107,9 @@ UPDATE __meta SET last_processed_block_height = $1 WHERE indexer_id = $2
 }
 
 impl Opts {
-    // returns a Lake Config object where AWS credentials are sourced from .env file first, and then from .aws/credentials if not found.
-    // https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html
+    /// returns a [near_lake_framework::LakeConfig] object where AWS credentials are sourced from
+    /// .env file first, and then from .aws/credentials if not found.
+    /// https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html
     pub async fn to_lake_config(
         &self,
         db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
@@ -129,7 +143,7 @@ impl Opts {
                     &self.indexer_type,
                     self.start_block_height
                         .expect("`start-block-height` must be provided to use `start-mode from-interruption`"),
-                    self.start_block_height,
+                    None,
                 ).await?;
                 fetch_last_processed_block_height_from_db(&self.indexer_id, db_with_meta_data_pool)
                     .await?
@@ -145,6 +159,9 @@ impl Opts {
     }
 }
 
+/// Internal function to perform a registration of the indexer with the given `indexer-id` and `indexer-type`
+/// in the `__meta` table of the provided database.
+/// Will call [apply_migration] function in the beginning.
 async fn register_indexer(
     db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
     indexer_id: &str,
@@ -183,6 +200,8 @@ ON CONFLICT (indexer_id) DO UPDATE
     Ok(())
 }
 
+/// Internal function to fetch the latest from a given `rpc-url`.
+/// Returns final block in the chain or throws an error.
 async fn fetch_latest_block_height_from_rpc(rpc_url: &str) -> anyhow::Result<u64> {
     let client = JsonRpcClient::connect(rpc_url);
     let request = methods::block::RpcBlockRequest {
@@ -194,6 +213,9 @@ async fn fetch_latest_block_height_from_rpc(rpc_url: &str) -> anyhow::Result<u64
     Ok(latest_block.header.height)
 }
 
+/// Internal function to fetch the `last_processed_block_height` stores in `__meta` table
+/// for the given `indexer-id`.
+/// Returns a block height [u64] or an error
 async fn fetch_last_processed_block_height_from_db(
     indexer_id: &str,
     pool: &sqlx::Pool<sqlx::Postgres>,
@@ -213,6 +235,9 @@ SELECT last_processed_block_height FROM __meta WHERE indexer_id = $1
         .ok_or_else(|| anyhow::anyhow!("Failed to convert `last_processed_block_height` to u64"))
 }
 
+/// Internal function to create `__meta` table in the given database.
+/// Uses `IF NOT EXISTS` to prevent redundant error.
+/// The schema of the `__meta` table is located in the function body.
 async fn apply_migration(
     db_with_meta_data_pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> anyhow::Result<()> {
