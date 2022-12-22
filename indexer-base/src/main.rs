@@ -1,22 +1,15 @@
 use cached::SizedCache;
-use clap::Parser;
-use dotenv::dotenv;
 use futures::{try_join, StreamExt};
-use std::env;
 use tokio::sync::Mutex;
-use tracing_subscriber::EnvFilter;
 
+use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
-
-use crate::configs::Opts;
 
 mod configs;
 mod db_adapters;
 mod models;
 
-// Categories for logging
-// TODO naming
-pub(crate) const INDEXER: &str = "indexer";
+pub(crate) const LOGGING_PREFIX: &str = "indexer_base";
 
 const INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 const MAX_DELAY_TIME: std::time::Duration = std::time::Duration::from_secs(120);
@@ -37,15 +30,14 @@ pub type ReceiptsCache =
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
+    dotenv::dotenv().ok();
+    let opts = indexer_opts::Opts::parse();
+    let _worker_guard = configs::init_tracing(opts.debug)?;
 
-    let opts: Opts = Opts::parse();
-    let pool = sqlx::PgPool::connect(&env::var("DATABASE_URL")?).await?;
-    // create a lake configuration with S3 information passed in as ENV vars
-    let config = opts.to_lake_config(opts.start_block_height).await;
-    init_tracing();
-
-    let (_lake_handle, stream) = near_lake_framework::streamer(config);
+    let pool = sqlx::PgPool::connect(&opts.database_url).await?;
+    let lake_config = opts.to_lake_config(&pool).await?;
+    let (_lake_handle, stream) = near_lake_framework::streamer(lake_config);
+    let end_block_height = opts.end_block_height.unwrap_or(u64::MAX);
 
     // We want to prevent unnecessary SELECT queries to the database to find
     // the Transaction hash for the Receipt.
@@ -61,28 +53,35 @@ async fn main() -> anyhow::Result<()> {
                 streamer_message,
                 &pool,
                 receipts_cache.clone(),
-                !opts.non_strict_mode,
+                true, // !opts.non_strict_mode, // TODO support one more flag
             )
         })
         .buffer_unordered(1usize);
 
-    // let mut time_now = std::time::Instant::now();
     while let Some(handle_message) = handlers.next().await {
         match handle_message {
-            Ok(_block_height) => {
-                // let elapsed = time_now.elapsed();
-                // println!(
-                //     "Elapsed time spent on block {}: {:.3?}",
-                //     _block_height, elapsed
-                // );
-                // time_now = std::time::Instant::now();
+            Ok(block_height) => {
+                if block_height % 100 == 0 {
+                    let _ = indexer_opts::update_meta(&pool, &opts.indexer_id, block_height).await;
+                }
+                if block_height > end_block_height {
+                    let _ = indexer_opts::update_meta(&pool, &opts.indexer_id, block_height).await;
+                    tracing::info!(
+                        target: LOGGING_PREFIX,
+                        "Congrats! Stop indexing because we reached end_block_height {}",
+                        end_block_height
+                    );
+                    break;
+                }
             }
             Err(e) => {
-                return Err(anyhow::anyhow!(e));
+                tracing::error!(target: LOGGING_PREFIX, "Stop indexing due to {}", e);
+                // we do not catch this error anywhere, this thread is just stopped with error,
+                // main thread continues serving metrics
+                anyhow::bail!(e)
             }
         }
     }
-
     Ok(())
 }
 
@@ -154,27 +153,4 @@ async fn handle_streamer_message(
         execution_outcomes_future
     )?;
     Ok(streamer_message.block.header.height)
-}
-
-fn init_tracing() {
-    let mut env_filter = EnvFilter::new("near_lake_framework=info");
-
-    if let Ok(rust_log) = std::env::var("RUST_LOG") {
-        if !rust_log.is_empty() {
-            for directive in rust_log.split(',').filter_map(|s| match s.parse() {
-                Ok(directive) => Some(directive),
-                Err(err) => {
-                    eprintln!("Ignoring directive `{}`: {}", s, err);
-                    None
-                }
-            }) {
-                env_filter = env_filter.add_directive(directive);
-            }
-        }
-    }
-
-    tracing_subscriber::fmt::Subscriber::builder()
-        .with_env_filter(env_filter)
-        .with_writer(std::io::stderr)
-        .init();
 }

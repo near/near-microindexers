@@ -1783,6 +1783,7 @@ dependencies = [
  "base64 0.11.0",
  "bigdecimal",
  "cached",
+ "dotenv",
  "futures",
  "hex",
  "indexer-opts",
@@ -1800,6 +1801,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
 ]
 
@@ -1839,6 +1841,7 @@ dependencies = [
  "base64 0.11.0",
  "bigdecimal",
  "cached",
+ "dotenv",
  "futures",
  "hex",
  "indexer-opts",
@@ -1855,6 +1858,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
 ]
 
