@@ -3,6 +3,7 @@ pub use clap::{self, ArgEnum, Parser};
 
 use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_lake_framework::near_indexer_primitives::types::{BlockReference, Finality};
+use sqlx::{Arguments, Row};
 
 pub(crate) const LOGGING_PREFIX: &str = "indexer";
 
@@ -86,13 +87,16 @@ pub async fn update_meta(
             None => anyhow::bail!("Failed to parse u64 to BigDecimal"),
         };
 
-    match sqlx::query!(
+    let mut args = sqlx::postgres::PgArguments::default();
+    args.add(block_height);
+    args.add(indexer_id);
+
+    match sqlx::query_with(
         r#"UPDATE __meta
            SET last_processed_block_height = $1
            WHERE indexer_id = $2 AND last_processed_block_height < $1
         "#,
-        block_height,
-        indexer_id,
+        args,
     )
     .execute(db_with_meta_data_pool)
     .await
@@ -191,7 +195,13 @@ async fn register_indexer(
         None
     };
 
-    sqlx::query!(
+    let mut args = sqlx::postgres::PgArguments::default();
+    args.add(indexer_id);
+    args.add(indexer_type);
+    args.add(start_block_height);
+    args.add(end_block_height);
+
+    sqlx::query_with(
         r#"
 INSERT INTO __meta (indexer_id, indexer_type, indexer_started_at, last_processed_block_height, start_block_height, end_block_height)
 VALUES ($1, $2, now(), $3, $3, $4)
@@ -200,10 +210,7 @@ ON CONFLICT (indexer_id) DO UPDATE
         end_block_height = EXCLUDED.end_block_height
     WHERE __meta.indexer_id = EXCLUDED.indexer_id
         "#,
-        indexer_id,
-        indexer_type,
-        start_block_height,
-        end_block_height,
+        args
     )
     .execute(db_with_meta_data_pool)
     .await?;
@@ -230,17 +237,18 @@ async fn fetch_last_processed_block_height_from_db(
     indexer_id: &str,
     pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> anyhow::Result<u64> {
-    let record = sqlx::query!(
+    let mut args = sqlx::postgres::PgArguments::default();
+    args.add(indexer_id);
+    let height: BigDecimal = sqlx::query_with(
         r#"
 SELECT last_processed_block_height FROM __meta WHERE indexer_id = $1
         "#,
-        indexer_id,
+        args,
     )
     .fetch_one(pool)
-    .await?;
-
-    record
-        .last_processed_block_height
+    .await?
+    .get(0);
+    height
         .to_u64()
         .ok_or_else(|| anyhow::anyhow!("Failed to convert `last_processed_block_height` to u64"))
 }
