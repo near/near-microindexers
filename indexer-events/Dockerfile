@@ -3,7 +3,8 @@ WORKDIR /tmp/
 
 # this build step will cache your dependencies
 COPY Cargo.lock ./
-RUN echo '[workspace]\nmembers = ["indexer-events"]' > Cargo.toml
+RUN echo '[workspace]\nmembers = ["indexer-events", "indexer-opts"]' > Cargo.toml
+COPY indexer-opts ./indexer-opts
 COPY indexer-events/Cargo.toml indexer-events/Cargo.toml
 RUN mkdir indexer-events/src && touch indexer-events/src/lib.rs && cargo build --release && rm -r indexer-events/src
 
