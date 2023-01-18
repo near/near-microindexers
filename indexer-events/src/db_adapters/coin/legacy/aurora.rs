@@ -117,9 +117,6 @@ async fn process_aurora_functions(
         return Ok(vec![]);
     }
 
-    // Note: aurora (now always, but) usually has binary args
-    let decoded_args = base64::decode(args)?;
-
     // MINT may produce several events, where involved_account_id is always NULL
     // deposit do not mint anything; mint goes in finish_deposit
     if method_name == "finish_deposit" {
@@ -162,7 +159,7 @@ async fn process_aurora_functions(
     // 1. affected_account_id is sender, delta is negative, absolute_amount decreased
     // 2. affected_account_id is receiver, delta is positive, absolute_amount increased
     if method_name == "ft_transfer" || method_name == "ft_transfer_call" {
-        let ft_transfer_args = match serde_json::from_slice::<FtTransfer>(&decoded_args) {
+        let ft_transfer_args = match serde_json::from_slice::<FtTransfer>(args) {
             Ok(x) => x,
             Err(err) => {
                 match outcome.execution_outcome.outcome.status {
@@ -261,7 +258,7 @@ async fn process_aurora_functions(
     }
 
     if method_name == "withdraw" {
-        let args = match WithdrawCallArgs::try_from_slice(&decoded_args) {
+        let args = match WithdrawCallArgs::try_from_slice(args) {
             Ok(x) => x,
             Err(err) => {
                 match outcome.execution_outcome.outcome.status {

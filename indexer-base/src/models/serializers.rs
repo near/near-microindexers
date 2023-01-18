@@ -83,6 +83,8 @@ pub(crate) fn extract_action_type_and_value_from_action_view(
             // args which is base64 encoded in case if it is a JSON object and put them near initial
             // args_base64
             // See for reference https://github.com/near/near-indexer-for-explorer/issues/87
+            // TODO investigate whether we still need decode after upgrading to
+            // https://github.com/near/near-lake-framework-rs/releases/tag/v0.6.0
             if let Ok(decoded_args) = base64::decode(args) {
                 if let Ok(mut args_json) = serde_json::from_slice(&decoded_args) {
                     escape_json(&mut args_json);
