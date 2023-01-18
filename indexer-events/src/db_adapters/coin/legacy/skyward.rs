@@ -72,8 +72,6 @@ async fn process_skyward_functions(
         _ => return Ok(vec![]),
     };
 
-    let decoded_args = base64::decode(args)?;
-
     if vec![
         "storage_deposit",
         "ft_balance_of",
@@ -84,6 +82,8 @@ async fn process_skyward_functions(
     {
         return Ok(vec![]);
     }
+
+    let decoded_args = base64::decode(args)?;
 
     // may mint the tokens
     if method_name == "new" {

@@ -94,8 +94,6 @@ async fn process_rainbow_bridge_functions(
         _ => return Ok(vec![]),
     };
 
-    let decoded_args = base64::decode(args)?;
-
     if vec![
         "storage_deposit",
         "finish_deposit",
@@ -109,6 +107,8 @@ async fn process_rainbow_bridge_functions(
     {
         return Ok(vec![]);
     }
+
+    let decoded_args = base64::decode(args)?;
 
     // MINT produces 1 event, where involved_account_id is NULL
     if method_name == "mint" {
