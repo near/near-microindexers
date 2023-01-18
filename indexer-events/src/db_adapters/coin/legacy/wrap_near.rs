@@ -72,8 +72,6 @@ async fn process_wrap_near_functions(
         _ => return Ok(vec![]),
     };
 
-    let decoded_args = base64::decode(args)?;
-
     if vec![
         "storage_deposit",
         "ft_balance_of",
@@ -85,6 +83,8 @@ async fn process_wrap_near_functions(
     {
         return Ok(vec![]);
     }
+
+    let decoded_args = base64::decode(args)?;
 
     // MINT produces 1 event, where involved_account_id is NULL
     if method_name == "near_deposit" {

@@ -97,9 +97,6 @@ async fn process_aurora_functions(
         _ => return Ok(vec![]),
     };
 
-    // Note: aurora (now always, but) usually has binary args
-    let decoded_args = base64::decode(args)?;
-
     if vec![
         "new",
         "call",
@@ -119,6 +116,9 @@ async fn process_aurora_functions(
     {
         return Ok(vec![]);
     }
+
+    // Note: aurora (now always, but) usually has binary args
+    let decoded_args = base64::decode(args)?;
 
     // MINT may produce several events, where involved_account_id is always NULL
     // deposit do not mint anything; mint goes in finish_deposit

@@ -90,8 +90,6 @@ async fn process_wentokensir_functions(
         _ => return Ok(vec![]),
     };
 
-    let decoded_args = base64::decode(args)?;
-
     if vec![
         "storage_deposit",
         "new",
@@ -104,6 +102,8 @@ async fn process_wentokensir_functions(
     {
         return Ok(vec![]);
     }
+
+    let decoded_args = base64::decode(args)?;
 
     // MINT produces 1 event, where involved_account_id is NULL
     if method_name == "near_deposit" {
