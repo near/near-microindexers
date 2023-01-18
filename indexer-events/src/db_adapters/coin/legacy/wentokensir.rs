@@ -103,8 +103,6 @@ async fn process_wentokensir_functions(
         return Ok(vec![]);
     }
 
-    let decoded_args = base64::decode(args)?;
-
     // MINT produces 1 event, where involved_account_id is NULL
     if method_name == "near_deposit" {
         let delta = BigDecimal::from_str(&deposit.to_string())?;
@@ -121,7 +119,7 @@ async fn process_wentokensir_functions(
 
     // other way to make MINT
     if method_name == "ft_on_transfer" {
-        let args = match serde_json::from_slice::<FtOnTransfer>(&decoded_args) {
+        let args = match serde_json::from_slice::<FtOnTransfer>(args) {
             Ok(x) => x,
             Err(err) => {
                 match outcome.execution_outcome.outcome.status {
@@ -152,7 +150,7 @@ async fn process_wentokensir_functions(
     // 1. affected_account_id is sender, delta is negative, absolute_amount decreased
     // 2. affected_account_id is receiver, delta is positive, absolute_amount increased
     if method_name == "ft_transfer" || method_name == "ft_transfer_call" {
-        let ft_transfer_args = match serde_json::from_slice::<FtTransfer>(&decoded_args) {
+        let ft_transfer_args = match serde_json::from_slice::<FtTransfer>(args) {
             Ok(x) => x,
             Err(err) => {
                 match outcome.execution_outcome.outcome.status {
@@ -204,7 +202,7 @@ async fn process_wentokensir_functions(
             // ft_transfer_call was successful, there's nothing to return back
             return Ok(vec![]);
         }
-        let ft_refund_args = match serde_json::from_slice::<FtRefund>(&decoded_args) {
+        let ft_refund_args = match serde_json::from_slice::<FtRefund>(args) {
             Ok(x) => x,
             Err(err) => {
                 match outcome.execution_outcome.outcome.status {
@@ -222,11 +220,10 @@ async fn process_wentokensir_functions(
         let mut delta = BigDecimal::from_str(&ft_refund_args.amount.0.to_string())?;
         // The contract may return only the part of the coins.
         // We should parse it from the output and subtract from the value from args
-        if let ExecutionStatusView::SuccessValue(transferred_amount_decoded) =
+        if let ExecutionStatusView::SuccessValue(transferred_amount_bytes) =
             &outcome.execution_outcome.outcome.status
         {
-            let transferred_amount =
-                serde_json::from_slice::<String>(&base64::decode(transferred_amount_decoded)?)?;
+            let transferred_amount = serde_json::from_slice::<String>(transferred_amount_bytes)?;
             delta = delta.sub(BigDecimal::from_str(&transferred_amount)?);
         }
         let negative_delta = delta.clone().mul(BigDecimal::from(-1));
@@ -287,7 +284,7 @@ async fn process_wentokensir_functions(
     // BURN produces 1 event, where involved_account_id is NULL
     // I've seen no burn events, but if someone calls it, it should be like this
     if method_name == "near_withdraw" {
-        let ft_burn_args = match serde_json::from_slice::<NearWithdraw>(&decoded_args) {
+        let ft_burn_args = match serde_json::from_slice::<NearWithdraw>(args) {
             Ok(x) => x,
             Err(err) => {
                 match outcome.execution_outcome.outcome.status {
