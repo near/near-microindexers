@@ -32,12 +32,13 @@ SELECT min(event_index), max(event_index) FROM coin_events;
 -- 16593120000000000000000000000000000 (2022-08-01)
 -- 16619904000000000000000000000000000 (2022-09-01)
 -- 16645824000000000000000000000000000 (2022-10-01) 
--- 16672608000000000000000000000000000 (2022-11-01) 
--- 16698528000000000000000000000000000 (2022-12-01) 
+-- 16672608000000000000000000000000000 (2022-11-01) - In Progress...
+-- 16698528000000000000000000000000000 (2022-12-01) - OK
+-- 16698528000000002000000000000000000
 
 -- 16094592000000000000000000000000000 (2021-01-01 to 2021-01-01) - OK (Old)
 -- 16725312000000000000000000000000000 (2023-01-01 to 2023-02-01) - OK
--- 16752096000000000000000000000000000 (2023-02-0 to 2023-03-01) - OK
+-- 16752096000000000000000000000000000 (2023-02-01 to 2023-03-01) - OK
 -- 16776288000000000000000000000000000 (2023-03-01 to 2023-04-01) 
 
 -- NOTE: Team suggested to use a new table name fungible_token_events instead of coin_events
@@ -73,7 +74,7 @@ PARTITION BY RANGE (event_index);
 CREATE INDEX fungible_token_events_affected_account_id_idx ON public.fungible_token_events USING btree (affected_account_id);
 CREATE INDEX fungible_token_events_block_height_idx ON public.fungible_token_events USING btree (block_height);
 CREATE INDEX fungible_token_events_receipt_id_idx ON public.fungible_token_events USING btree (receipt_id);
-CREATE INDEX fungible_token_events_block_timestamp_idx ON fungible_token_events USING btree (block_timestamp);
+CREATE INDEX fungible_token_events_block_timestamp_idx ON public.fungible_token_events USING btree (block_timestamp);
 -- Create a partition to start after next month (2023-02-01 to 2023-03-01)
 CREATE TABLE fungible_token_events_p202302 PARTITION OF fungible_token_events FOR VALUES FROM (16752096000000000000000000000000000) TO (16776288000000000000000000000000000);
 
@@ -113,9 +114,11 @@ END
 $func$;
 
 -- 2023-01-01 to 2023-02-01
-SELECT * FROM fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202301', 'event_index', 16698528000000000000000000000000000, 16881696000000000000000000000000000);
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202301', 'event_index', 16698528000000000000000000000000000, 16881696000000000000000000000000000);
 -- 2022-12-01 to 2023-01-01
-SELECT * FROM fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202212', 'event_index', 16698528000000000000000000000000000, 16725312000000000000000000000000000);
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202212', 'event_index', 16698528000000000000000000000000000, 16725312000000000000000000000000000);
+-- 2022-11-01 to 2022-12-01
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202211', 'event_index', 16672608000000000000000000000000000, 16698528000000000000000000000000000);
 
 -- Vacuum the table
 VACUUM fungible_token_events;
