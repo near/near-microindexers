@@ -3,8 +3,8 @@ use std::fmt::Write;
 
 pub use indexer_events::FieldCount;
 
-pub(crate) mod coin_events;
 pub(crate) mod contracts;
+pub(crate) mod fungible_token_events;
 pub(crate) mod nft_events;
 
 pub trait FieldCount {

@@ -2,7 +2,7 @@ use crate::db_adapters::event_types;
 use crate::db_adapters::event_types::Nep141Event;
 use crate::db_adapters::Event;
 use crate::db_adapters::{coin, events, get_base};
-use crate::models::coin_events::CoinEvent;
+use crate::models::fungible_token_events::FungibleTokenEvent;
 use bigdecimal::BigDecimal;
 use near_lake_framework::near_indexer_primitives;
 use near_primitives::types::AccountId;
@@ -13,7 +13,7 @@ pub(crate) async fn collect_nep141_events(
     shard_id: &near_indexer_primitives::types::ShardId,
     receipt_execution_outcomes: &[near_indexer_primitives::IndexerExecutionOutcomeWithReceipt],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
-) -> anyhow::Result<Vec<CoinEvent>> {
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
     let mut res = Vec::new();
     for outcome in receipt_execution_outcomes {
         let events = events::extract_events(outcome);
@@ -37,7 +37,7 @@ async fn compose_db_events(
     events: &Nep141Event,
     outcome: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
-) -> anyhow::Result<Vec<CoinEvent>> {
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
     let mut ft_events = Vec::new();
     match &events.event_kind {
         event_types::Nep141EventKind::FtMint(mint_events) => {

@@ -1,6 +1,6 @@
 use crate::db_adapters::Event;
 use crate::models;
-use crate::models::coin_events::CoinEvent;
+use crate::models::fungible_token_events::FungibleTokenEvent;
 use bigdecimal::BigDecimal;
 use futures::future::try_join_all;
 use futures::try_join;
@@ -27,7 +27,7 @@ pub(crate) async fn store_ft(
     streamer_message: &near_indexer_primitives::StreamerMessage,
     chain_id: &indexer_opts::ChainId,
 ) -> anyhow::Result<()> {
-    let mut events: Vec<CoinEvent> = vec![];
+    let mut events: Vec<FungibleTokenEvent> = vec![];
 
     let events_futures = streamer_message
         .shards
@@ -40,7 +40,7 @@ pub(crate) async fn store_ft(
 }
 
 pub(crate) fn filter_zeros_and_enumerate_events(
-    ft_events: &mut Vec<crate::models::coin_events::CoinEvent>,
+    ft_events: &mut Vec<crate::models::fungible_token_events::FungibleTokenEvent>,
     shard_id: &near_indexer_primitives::types::ShardId,
     timestamp: u64,
     event_type: &Event,
@@ -57,8 +57,8 @@ async fn collect_ft_for_shard(
     streamer_message: &near_indexer_primitives::StreamerMessage,
     shard: &near_indexer_primitives::IndexerShard,
     chain_id: &indexer_opts::ChainId,
-) -> anyhow::Result<Vec<CoinEvent>> {
-    let mut events: Vec<CoinEvent> = vec![];
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
+    let mut events: Vec<FungibleTokenEvent> = vec![];
 
     let nep141_future = nep141_events::collect_nep141_events(
         &shard.shard_id,
@@ -81,8 +81,8 @@ async fn collect_ft_for_shard(
 async fn build_event(
     base: crate::db_adapters::EventBase,
     custom: FtEvent,
-) -> anyhow::Result<CoinEvent> {
-    Ok(CoinEvent {
+) -> anyhow::Result<FungibleTokenEvent> {
+    Ok(FungibleTokenEvent {
         event_index: BigDecimal::zero(), // initialized later
         standard: base.standard,
         receipt_id: base.receipt_id,

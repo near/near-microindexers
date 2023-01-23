@@ -111,8 +111,8 @@ I decided to put `account_changes` data first (just to be consistent)
 `assets__non_fungible_token_events`, `assets__fungible_token_events` do not have the sorting column.
 In the current solution, we've added artificial `event_index` column.
 
-The new `coin_events` table stores the data in the format of affected/involved account_id, that simplifies filtering by affected `account_id`.  
-`coin_events` still does not have `absolute_value` column, so you have to collect it from RPC if needed.
+The new `fungible_token_events` table stores the data in the format of affected/involved account_id, that simplifies filtering by affected `account_id`.  
+`fungible_token_events` still does not have `absolute_value` column, so you have to collect it from RPC if needed.
 
 ### What if my contract does not produce events?
 

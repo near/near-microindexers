@@ -1,6 +1,6 @@
 use crate::db_adapters;
 use crate::db_adapters::{coin, numeric_types, Event};
-use crate::models::coin_events::CoinEvent;
+use crate::models::fungible_token_events::FungibleTokenEvent;
 use bigdecimal::BigDecimal;
 use near_lake_framework::near_indexer_primitives;
 use near_primitives::types::AccountId;
@@ -33,8 +33,8 @@ pub(crate) async fn collect_wrap_near(
     shard_id: &near_indexer_primitives::types::ShardId,
     receipt_execution_outcomes: &[near_indexer_primitives::IndexerExecutionOutcomeWithReceipt],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
-) -> anyhow::Result<Vec<CoinEvent>> {
-    let mut events: Vec<CoinEvent> = vec![];
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
+    let mut events: Vec<FungibleTokenEvent> = vec![];
 
     for outcome in receipt_execution_outcomes {
         if outcome.receipt.receiver_id != AccountId::from_str("wrap.near")?
@@ -64,7 +64,7 @@ async fn process_wrap_near_functions(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     action: &ActionView,
     outcome: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
-) -> anyhow::Result<Vec<CoinEvent>> {
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
     let (method_name, args) = match action {
         ActionView::FunctionCall {
             method_name, args, ..
@@ -278,7 +278,7 @@ async fn process_mint_log(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     outcome: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
     log: &str,
-) -> anyhow::Result<Option<CoinEvent>> {
+) -> anyhow::Result<Option<FungibleTokenEvent>> {
     lazy_static::lazy_static! {
         static ref RE: regex::Regex = regex::Regex::new(r"^Deposit (?P<amount>(0|[1-9][0-9]*)) NEAR to (?P<account_id>[a-z0-9_\.\-]+)$").unwrap();
     }
