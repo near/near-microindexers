@@ -32,7 +32,7 @@ SELECT min(event_index), max(event_index) FROM coin_events;
 -- 16593120000000000000000000000000000 (2022-08-01)
 -- 16619904000000000000000000000000000 (2022-09-01)
 -- 16645824000000000000000000000000000 (2022-10-01) 
--- 16672608000000000000000000000000000 (2022-11-01) - In Progress...
+-- 16672608000000000000000000000000000 (2022-11-01) - OK
 -- 16698528000000000000000000000000000 (2022-12-01) - OK
 -- 16698528000000002000000000000000000
 
@@ -121,6 +121,8 @@ SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202212', 'event_index', 16698528000000000000000000000000000, 16725312000000000000000000000000000);
 -- 2022-11-01 to 2022-12-01
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202211', 'event_index', 16672608000000000000000000000000000, 16698528000000000000000000000000000);
+-- 2022-10-01 to 2022-11-01
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202210', 'event_index', 16645824000000000000000000000000000, 16672608000000000000000000000000000);
 
 -- Vacuum the table
 VACUUM fungible_token_events;
