@@ -76,6 +76,7 @@ CREATE INDEX fungible_token_events_block_height_idx ON public.fungible_token_eve
 CREATE INDEX fungible_token_events_receipt_id_idx ON public.fungible_token_events USING btree (receipt_id);
 CREATE INDEX fungible_token_events_block_timestamp_idx ON public.fungible_token_events USING btree (block_timestamp);
 CREATE INDEX fungible_token_events_affected_account_id_idx ON public.fungible_token_events USING btree (affected_account_id);
+CREATE INDEX fungible_token_events_contract_account_id_idx ON public.fungible_token_events USING btree (contract_account_id);
 -- Create a partition to start after next month (2023-02-01 to 2023-03-01)
 CREATE TABLE fungible_token_events_p202302 PARTITION OF fungible_token_events FOR VALUES FROM (16752096000000000000000000000000000) TO (16776288000000000000000000000000000);
 
