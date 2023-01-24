@@ -75,6 +75,7 @@ CREATE INDEX fungible_token_events_affected_account_id_idx ON public.fungible_to
 CREATE INDEX fungible_token_events_block_height_idx ON public.fungible_token_events USING btree (block_height);
 CREATE INDEX fungible_token_events_receipt_id_idx ON public.fungible_token_events USING btree (receipt_id);
 CREATE INDEX fungible_token_events_block_timestamp_idx ON public.fungible_token_events USING btree (block_timestamp);
+CREATE INDEX fungible_token_events_affected_account_id_idx ON public.fungible_token_events USING btree (affected_account_id);
 -- Create a partition to start after next month (2023-02-01 to 2023-03-01)
 CREATE TABLE fungible_token_events_p202302 PARTITION OF fungible_token_events FOR VALUES FROM (16752096000000000000000000000000000) TO (16776288000000000000000000000000000);
 
@@ -122,43 +123,3 @@ SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old
 
 -- Vacuum the table
 VACUUM fungible_token_events;
-
-
-
-----
-
-WITH original_query as (
-             SELECT
-                 event_index,
-                 involved_account_id,
-                 delta_amount,
-                 cause,
-                 status,
-                 block_timestamp,
-                 block_height
-             FROM fungible_token_events
-             WHERE contract_account_id = 'token.sweat'
-                -- AND affected_account_id = $2
-                 AND event_index < 16725312000000000000000000000000000
-             ORDER BY event_index desc
-             LIMIT 100
-         ), timestamps as (
-             SELECT
-                 min(block_timestamp) min_block_timestamp,
-                 max(block_timestamp) max_block_timestamp
-             FROM original_query
-         )
-         SELECT
-             event_index,
-             involved_account_id,
-             delta_amount delta_balance,
-             cause,
-             status,
-             block_timestamp block_timestamp_nanos,
-             block_height
-         FROM fungible_token_events, timestamps
-         WHERE contract_account_id = 'token.sweat'
-            -- AND affected_account_id = $2
-             AND block_timestamp >= min_block_timestamp
-             AND block_timestamp <= max_block_timestamp
-         ORDER BY event_index desc
