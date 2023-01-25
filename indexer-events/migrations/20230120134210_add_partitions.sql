@@ -99,44 +99,8 @@ SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202211', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-11-01'), fn_timestamp2nanosec(TIMESTAMP '2022-12-01'));
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202210', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-10-01'), fn_timestamp2nanosec(TIMESTAMP '2022-11-01'));
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202209', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-09-01'), fn_timestamp2nanosec(TIMESTAMP '2022-10-01'));
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202208', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-08-01'), fn_timestamp2nanosec(TIMESTAMP '2022-09-01'));
 
 
 -- Vacuum the table
 VACUUM fungible_token_events;
-
-
-WITH original_query as (
-             SELECT
-                 event_index,
-                 involved_account_id,
-                 delta_amount,
-                 cause,
-                 status,
-                 block_timestamp,
-                 block_height
-             FROM coin_events
-             WHERE contract_account_id = 'token.sweat'
-                 AND affected_account_id = 'oracle.sweat'
-                 AND event_index < 16619904000000000000000000000000000
-             ORDER BY event_index desc
-             LIMIT 100
-         ), timestamps as (
-             SELECT
-                 min(block_timestamp) min_block_timestamp,
-                 max(block_timestamp) max_block_timestamp
-             FROM original_query
-         )
-         SELECT
-             event_index,
-             involved_account_id,
-             delta_amount delta_balance,
-             cause,
-             status,
-             block_timestamp block_timestamp_nanos,
-             block_height
-         FROM coin_events, timestamps
-         WHERE contract_account_id = 'token.sweat'
-             AND affected_account_id = 'oracle.sweat'
-             AND block_timestamp >= min_block_timestamp
-             AND block_timestamp <= max_block_timestamp
-         ORDER BY event_index desc
