@@ -1,7 +1,7 @@
 use crate::db_adapters;
 use crate::db_adapters::coin;
 use crate::db_adapters::{numeric_types, Event};
-use crate::models::coin_events::CoinEvent;
+use crate::models::fungible_token_events::FungibleTokenEvent;
 use bigdecimal::BigDecimal;
 use near_lake_framework::near_indexer_primitives;
 use near_primitives::borsh;
@@ -59,8 +59,8 @@ pub(crate) async fn collect_aurora(
     shard_id: &near_indexer_primitives::types::ShardId,
     receipt_execution_outcomes: &[near_indexer_primitives::IndexerExecutionOutcomeWithReceipt],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
-) -> anyhow::Result<Vec<CoinEvent>> {
-    let mut events: Vec<CoinEvent> = vec![];
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
+    let mut events: Vec<FungibleTokenEvent> = vec![];
     for outcome in receipt_execution_outcomes {
         if outcome.receipt.receiver_id != AccountId::from_str("aurora")?
             || !db_adapters::events::extract_events(outcome).is_empty()
@@ -86,7 +86,7 @@ async fn process_aurora_functions(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     action: &ActionView,
     outcome: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
-) -> anyhow::Result<Vec<CoinEvent>> {
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
     let (method_name, args, ..) = match action {
         ActionView::FunctionCall {
             method_name,

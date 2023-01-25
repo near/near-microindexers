@@ -4,7 +4,7 @@ use sqlx::Arguments;
 use crate::models::FieldCount;
 
 #[derive(Debug, sqlx::FromRow, FieldCount)]
-pub struct CoinEvent {
+pub struct FungibleTokenEvent {
     pub event_index: BigDecimal,
     pub standard: String,
     pub receipt_id: String,
@@ -19,7 +19,7 @@ pub struct CoinEvent {
     pub event_memo: Option<String>,
 }
 
-impl crate::models::SqlMethods for CoinEvent {
+impl crate::models::SqlMethods for FungibleTokenEvent {
     fn add_to_args(&self, args: &mut sqlx::postgres::PgArguments) {
         args.add(&self.event_index);
         args.add(&self.standard);
@@ -36,12 +36,12 @@ impl crate::models::SqlMethods for CoinEvent {
     }
 
     fn insert_query(items_count: usize) -> anyhow::Result<String> {
-        Ok("INSERT INTO coin_events VALUES ".to_owned()
-            + &crate::models::create_placeholders(items_count, CoinEvent::field_count())?
+        Ok("INSERT INTO fungible_token_events VALUES ".to_owned()
+            + &crate::models::create_placeholders(items_count, FungibleTokenEvent::field_count())?
             + " ON CONFLICT DO NOTHING")
     }
 
     fn name() -> String {
-        "coin_events".to_string()
+        "fungible_token_events".to_string()
     }
 }

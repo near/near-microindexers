@@ -1,6 +1,6 @@
 use crate::db_adapters;
 use crate::db_adapters::{coin, numeric_types, Event};
-use crate::models::coin_events::CoinEvent;
+use crate::models::fungible_token_events::FungibleTokenEvent;
 use bigdecimal::BigDecimal;
 use near_lake_framework::near_indexer_primitives;
 use near_primitives::types::AccountId;
@@ -40,8 +40,8 @@ pub(crate) async fn collect_tkn_near(
     shard_id: &near_indexer_primitives::types::ShardId,
     receipt_execution_outcomes: &[near_indexer_primitives::IndexerExecutionOutcomeWithReceipt],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
-) -> anyhow::Result<Vec<CoinEvent>> {
-    let mut events: Vec<CoinEvent> = vec![];
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
+    let mut events: Vec<FungibleTokenEvent> = vec![];
 
     for outcome in receipt_execution_outcomes {
         if !is_tkn_near_contract(outcome.receipt.receiver_id.as_str())
@@ -80,7 +80,7 @@ async fn process_tkn_near_functions(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     action: &ActionView,
     outcome: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
-) -> anyhow::Result<Vec<CoinEvent>> {
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
     let (method_name, args, deposit) = match action {
         ActionView::FunctionCall {
             method_name,

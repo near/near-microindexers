@@ -1,4 +1,4 @@
-use crate::models::coin_events::CoinEvent;
+use crate::models::fungible_token_events::FungibleTokenEvent;
 use futures::try_join;
 use near_lake_framework::near_indexer_primitives;
 
@@ -14,12 +14,12 @@ pub(crate) async fn collect_legacy(
     receipt_execution_outcomes: &[near_indexer_primitives::IndexerExecutionOutcomeWithReceipt],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     chain_id: &indexer_opts::ChainId,
-) -> anyhow::Result<Vec<CoinEvent>> {
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
     // We don't need to store legacy events for testnet
     if chain_id != &indexer_opts::ChainId::Mainnet {
         return Ok(vec![]);
     }
-    let mut events: Vec<CoinEvent> = vec![];
+    let mut events: Vec<FungibleTokenEvent> = vec![];
 
     let aurora_future = aurora::collect_aurora(shard_id, receipt_execution_outcomes, block_header);
     let rainbow_bridge_future =
