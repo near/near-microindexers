@@ -1,6 +1,3 @@
--- Adding an index by block_timestamp just in case people want to query by it
-CREATE INDEX coin_events_block_timestamp_idx ON coin_events USING btree (block_timestamp);
-
 -- Check current MIN and MAX for the range partition key 
 SELECT min(event_index), max(event_index) FROM coin_events;
 -- Current result is:
@@ -27,7 +24,6 @@ ALTER TABLE coin_events RENAME TO fungible_token_events_old;
 ALTER TABLE coin_events_affected_account_id_idx RENAME TO fungible_token_events_affected_account_id_idx_old;
 ALTER TABLE coin_events_block_height_idx RENAME TO fungible_token_events_block_height_idx_old;
 ALTER TABLE coin_events_receipt_id_idx RENAME TO fungible_token_events_receipt_id_idx_old;
-ALTER TABLE coin_events_block_timestamp_idx RENAME TO fungible_token_events_block_timestamp_idx_old;
 
 -- Re-Create the table with partition config
 CREATE TABLE fungible_token_events (
@@ -51,7 +47,6 @@ PARTITION BY RANGE (event_index);
 CREATE INDEX fungible_token_events_affected_account_id_idx ON public.fungible_token_events USING btree (affected_account_id);
 CREATE INDEX fungible_token_events_block_height_idx ON public.fungible_token_events USING btree (block_height);
 CREATE INDEX fungible_token_events_receipt_id_idx ON public.fungible_token_events USING btree (receipt_id);
-CREATE INDEX fungible_token_events_block_timestamp_idx ON public.fungible_token_events USING btree (block_timestamp);
 CREATE INDEX fungible_token_events_affected_account_id_idx ON public.fungible_token_events USING btree (affected_account_id);
 CREATE INDEX fungible_token_events_contract_account_id_idx ON public.fungible_token_events USING btree (contract_account_id);
 -- Create a partition to start after next month (2023-02-01 to 2023-03-01)
@@ -91,8 +86,6 @@ BEGIN
 	EXECUTE 'ALTER TABLE ' || _poldname || ' DROP CONSTRAINT ' || _poldname || '_check_constraint';
 END
 $func$;
-
-
 
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202301', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2023-01-01'), fn_timestamp2nanosec(TIMESTAMP '2023-02-01'));
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202212', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-12-01'), fn_timestamp2nanosec(TIMESTAMP '2023-01-01'));
