@@ -100,7 +100,42 @@ SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202210', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-10-01'), fn_timestamp2nanosec(TIMESTAMP '2022-11-01'));
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202209', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-09-01'), fn_timestamp2nanosec(TIMESTAMP '2022-10-01'));
 SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202208', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-08-01'), fn_timestamp2nanosec(TIMESTAMP '2022-09-01'));
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202207', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-07-01'), fn_timestamp2nanosec(TIMESTAMP '2022-08-01'));
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202201_to_06', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-01-01'), fn_timestamp2nanosec(TIMESTAMP '2022-07-01'));
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202107_to_12', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-07-01'), fn_timestamp2nanosec(TIMESTAMP '2022-01-01'));
+SELECT fn_partition_by_range('fungible_token_events', 'fungible_token_events_old', 'fungible_token_events_p202101_to_06', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-01-01'), fn_timestamp2nanosec(TIMESTAMP '2021-07-01'));
 
+-- After all the data moved into the correspondent partition we can now detach and drop the old partition without the need to execute VACUUM
+-- NOTE: We could use VACUUM FULL to recover OS disk space but it would require exclusive lock
+ALTER TABLE fungible_token_events DETACH PARTITION fungible_token_events_old;
+DROP TABLE fungible_token_events_old;
 
--- Vacuum the table
-VACUUM fungible_token_events;
+-- To automatically create new partitions. Examples:
+-- select fn_create_next_partition('mytable', current_date, 'month', 'yyyyMM');
+-- select fn_create_next_partition('mytable', current_date, 'day', 'yyyyMMDD');
+-- select fn_create_next_partition('mytable', current_date, 'week', 'yyyyMMW');
+CREATE OR REPLACE FUNCTION fn_create_next_partition(_tbl text, _timestamp date, _interval text, _postfixformat text)
+  RETURNS void
+  LANGUAGE plpgsql AS
+$func$
+DECLARE
+	_start numeric;
+	_end numeric; 
+	_partition_name text;
+begin
+	_start := fn_timestamp2nanosec(date_trunc(_interval, _timestamp + ('1 ' || _interval)::interval));
+	_end := fn_timestamp2nanosec(date_trunc(_interval, _timestamp + ('2 ' || _interval)::interval));
+	_partition_name := TO_CHAR(date_trunc(_interval, _timestamp + ('1 ' || _interval)::interval), _postfixformat);
+	-- Create partition from _start to _end
+	EXECUTE 'CREATE TABLE IF NOT EXISTS ' || _tbl || '_p' || _partition_name || ' PARTITION OF ' || _tbl || ' FOR VALUES FROM (' || _start || ') TO (' || _end || ')';
+END
+$func$;
+
+-- GCP Cloud SQL requires these flags:
+-- cloudsql.enable_pg_cron = On
+-- cron.database_name = indexer_balances_mainnet
+
+create extension pg_cron;
+
+-- Every first day of the month at 10am creates a new partition for the next month
+SELECT cron.schedule('0 10 1 * *', $$SELECT fn_create_next_partition('fungible_token_events', CURRENT_DATE, 'month', 'yyyyMM'));
