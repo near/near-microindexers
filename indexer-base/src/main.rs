@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
 
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
     let lake_config = opts.to_lake_config(&pool).await?;
-    let (_lake_handle, stream) = near_lake_framework::streamer(lake_config);
+    let (sender, stream) = near_lake_framework::streamer(lake_config);
     let end_block_height = opts.end_block_height.unwrap_or(u64::MAX);
 
     // We want to prevent unnecessary SELECT queries to the database to find
@@ -82,7 +82,11 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
-    Ok(())
+    match sender.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(anyhow::Error::from(e)),
+    }
 }
 
 async fn handle_streamer_message(
