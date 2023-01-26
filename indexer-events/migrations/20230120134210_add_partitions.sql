@@ -141,4 +141,4 @@ create extension pg_cron;
 --  Every Monday at 10am creates a new partition for the next week
 SELECT cron.schedule('0 10 * * 1', $$SELECT fn_create_next_partition('fungible_token_events', CURRENT_DATE, 'week', 'yyyyMM_W')$$);
 -- Create a partition for the first days of Feb/2023 to transition from month to week of the month range
-CREATE TABLE fungible_token_events_p202302_month2week PARTITION OF fungible_token_events FOR VALUES FROM (fn_timestamp2nanosec(TIMESTAMP '2023-02-01')) TO (fn_timestamp2nanosec(TIMESTAMP '2023-03-06'));
+CREATE TABLE fungible_token_events_p202302_month2week PARTITION OF fungible_token_events FOR VALUES FROM (fn_timestamp2nanosec(TIMESTAMP '2023-02-01')) TO (fn_timestamp2nanosec(TIMESTAMP '2023-02-06'));
