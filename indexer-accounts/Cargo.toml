@@ -31,7 +31,7 @@ tracing-subscriber = "0.2.4"
 quote = "1.0.17"
 
 near-crypto = "0.15.0"
-near-lake-framework = "0.6.0"
+near-lake-framework = "0.6.1"
 near-primitives = "0.15.0"
 
 indexer-opts = { path = "../indexer-opts" }
