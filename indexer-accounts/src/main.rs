@@ -51,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
+    drop(handlers); // close the channel so the sender will stop
     match sender.await {
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) => Err(e),
