@@ -63,10 +63,34 @@ SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', '
 SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202209', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-09-01'), fn_timestamp2nanosec(TIMESTAMP '2022-10-01'));
 SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202208', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-08-01'), fn_timestamp2nanosec(TIMESTAMP '2022-09-01'));
 SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202207', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-07-01'), fn_timestamp2nanosec(TIMESTAMP '2022-08-01'));
-SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202201_to_06', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-01-01'), fn_timestamp2nanosec(TIMESTAMP '2022-07-01'));
-SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202107_to_12', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-07-01'), fn_timestamp2nanosec(TIMESTAMP '2022-01-01'));
-SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202101_to_06', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-01-01'), fn_timestamp2nanosec(TIMESTAMP '2021-07-01'));
-SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202007_to_12', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2020-07-01'), fn_timestamp2nanosec(TIMESTAMP '2021-01-01'));
+
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202206', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-06-01'), fn_timestamp2nanosec(TIMESTAMP '2022-07-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202205', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-05-01'), fn_timestamp2nanosec(TIMESTAMP '2022-06-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202204', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-04-01'), fn_timestamp2nanosec(TIMESTAMP '2022-05-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202203', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-03-01'), fn_timestamp2nanosec(TIMESTAMP '2022-04-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202202', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-02-01'), fn_timestamp2nanosec(TIMESTAMP '2022-03-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202201', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-01-01'), fn_timestamp2nanosec(TIMESTAMP '2022-02-01'));
+
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202112', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-12-01'), fn_timestamp2nanosec(TIMESTAMP '2022-01-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202111', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-11-01'), fn_timestamp2nanosec(TIMESTAMP '2021-12-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202110', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-10-01'), fn_timestamp2nanosec(TIMESTAMP '2021-11-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202109', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-09-01'), fn_timestamp2nanosec(TIMESTAMP '2021-10-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202108', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-08-01'), fn_timestamp2nanosec(TIMESTAMP '2021-09-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202107', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-07-01'), fn_timestamp2nanosec(TIMESTAMP '2021-08-01'));
+
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202106', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-06-01'), fn_timestamp2nanosec(TIMESTAMP '2021-07-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202105', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-05-01'), fn_timestamp2nanosec(TIMESTAMP '2021-06-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202104', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-04-01'), fn_timestamp2nanosec(TIMESTAMP '2021-05-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202103', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-03-01'), fn_timestamp2nanosec(TIMESTAMP '2021-04-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202102', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-02-01'), fn_timestamp2nanosec(TIMESTAMP '2021-03-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202101', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2021-01-01'), fn_timestamp2nanosec(TIMESTAMP '2021-02-01'));
+
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202012', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2020-12-01'), fn_timestamp2nanosec(TIMESTAMP '2021-01-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202011', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2020-11-01'), fn_timestamp2nanosec(TIMESTAMP '2020-12-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202010', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2020-10-01'), fn_timestamp2nanosec(TIMESTAMP '2020-11-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202009', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2020-09-01'), fn_timestamp2nanosec(TIMESTAMP '2020-10-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202008', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2020-08-01'), fn_timestamp2nanosec(TIMESTAMP '2020-09-01'));
+SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202007', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2020-07-01'), fn_timestamp2nanosec(TIMESTAMP '2020-08-01'));
 
 -- After all the data moved into the correspondent partition we can now detach and drop the old partition without the need to execute VACUUM
 -- NOTE: We could use VACUUM FULL to recover OS disk space but it would require exclusive lock
