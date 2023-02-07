@@ -38,7 +38,7 @@ pub type BalanceCache =
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let opts = indexer_opts::Opts::parse();
-    let _worker_guard = configs::init_tracing(opts.debug)?;
+    configs::init_tracing(opts.debug)?;
 
     let rpc_url = opts
         .rpc_url

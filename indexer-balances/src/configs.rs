@@ -1,12 +1,13 @@
 use tracing_subscriber::EnvFilter;
 
-pub(crate) fn init_tracing(
-    debug: bool,
-) -> anyhow::Result<tracing_appender::non_blocking::WorkerGuard> {
-    let mut env_filter = EnvFilter::new("indexer_balances=info,indexer=info");
+pub(crate) fn init_tracing(debug: bool) -> anyhow::Result<()> {
+    let mut env_filter =
+        EnvFilter::new("near_lake_framework=info,indexer_balances=info,indexer=info,stats=info");
 
     if debug {
-        env_filter = env_filter.add_directive("near_lake_framework=debug".parse()?);
+        env_filter = env_filter
+            .add_directive("near_lake_framework=debug".parse()?)
+            .add_directive("indexer_balances=debug".parse()?);
     }
 
     if let Ok(rust_log) = std::env::var("RUST_LOG") {
@@ -28,11 +29,9 @@ pub(crate) fn init_tracing(
         }
     }
 
-    let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
-
     let subscriber = tracing_subscriber::fmt::Subscriber::builder()
-        .with_writer(non_blocking)
-        .with_env_filter(env_filter);
+        .with_env_filter(env_filter)
+        .with_writer(std::io::stderr);
 
     if std::env::var("ENABLE_JSON_LOGS").is_ok() {
         subscriber.json().init();
@@ -40,5 +39,5 @@ pub(crate) fn init_tracing(
         subscriber.compact().init();
     }
 
-    Ok(guard)
+    Ok(())
 }
