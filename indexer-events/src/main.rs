@@ -26,7 +26,7 @@ pub struct AccountWithContract {
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let opts = indexer_opts::Opts::parse();
-    let _worker_guard = configs::init_tracing(opts.debug)?;
+    configs::init_tracing(opts.debug)?;
 
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
     let lake_config = opts.to_lake_config(&pool).await?;
