@@ -56,6 +56,28 @@ ALTER TABLE near_balance_events ATTACH PARTITION near_balance_events_old FOR VAL
 ALTER TABLE near_balance_events_old DROP CONSTRAINT near_balance_events_old_check_constraint;
 -- DONE!!! At this point the table is usable again :)
 
+CREATE OR REPLACE FUNCTION fn_partition_by_range(_tbl text, _poldname text, _pnewname text, _pkey text, _start numeric, _end numeric)
+    RETURNS void
+    LANGUAGE plpgsql AS
+$func$
+BEGIN
+    -- Detach old partition
+    EXECUTE 'ALTER TABLE ' || _tbl || ' DETACH PARTITION ' || _poldname;
+    -- Create partition from _start to _end
+    EXECUTE 'CREATE TABLE ' || _pnewname || ' PARTITION OF ' || _tbl || ' FOR VALUES FROM (' || _start || ') TO (' || _end || ')';
+    -- Insert data to partition from _start to _end
+    EXECUTE 'INSERT INTO ' || _pnewname || ' SELECT * FROM ' || _poldname || ' WHERE ' || _pkey || ' >= ' || _start || ' AND ' || _pkey || ' < ' || _end;
+    -- Delete data from old partition from _start to _end
+    EXECUTE 'DELETE FROM ' || _poldname || ' WHERE ' || _pkey || ' >= ' || _start || ' AND ' || _pkey || ' < ' || _end;
+    -- Add check on old partition from 0 to _start
+    EXECUTE 'ALTER TABLE ' || _poldname || ' ADD CONSTRAINT ' || _poldname || '_check_constraint CHECK (' || _pkey || ' >= 0 AND ' || _pkey || ' < ' || _start || ') NOT VALID';
+    -- Re-Attach old partition from 0 to _start
+    EXECUTE 'ALTER TABLE ' || _tbl || ' ATTACH PARTITION ' || _poldname || ' FOR VALUES FROM (0) TO (' || _start || ')';
+    -- Drop the check on old partition
+    EXECUTE 'ALTER TABLE ' || _poldname || ' DROP CONSTRAINT ' || _poldname || '_check_constraint';
+END
+$func$;
+
 SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202301', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2023-01-01'), fn_timestamp2nanosec(TIMESTAMP '2023-02-01'));
 SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202212', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-12-01'), fn_timestamp2nanosec(TIMESTAMP '2023-01-01'));
 SELECT fn_partition_by_range('near_balance_events', 'near_balance_events_old', 'near_balance_events_p202211', 'event_index', fn_timestamp2nanosec(TIMESTAMP '2022-11-01'), fn_timestamp2nanosec(TIMESTAMP '2022-12-01'));
