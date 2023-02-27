@@ -4,7 +4,7 @@ Async Postgres-compatible solution to load the data from NEAR blockchain.
 Based on [NEAR Lake Framework](https://github.com/near/near-lake-framework-rs).
 
 [Indexer For Explorer](https://github.com/near/near-indexer-for-explorer) has some disadvantages that we wanted to fix.
-That's why we've created smaller projects, almost independent mini-indexers:
+That's why we've created smaller projects, independent mini-indexers:
 - `indexer-base` works with basic information about transactions, receipts;
 - `indexer-accounts` works with accounts and access_keys;
 - `indexer-balances` collects the info about native NEAR token balance changes (all the changes are validated);
@@ -17,18 +17,32 @@ That's why we've created smaller projects, almost independent mini-indexers:
 - Separate projects are easier to maintain;
 - The main difference is in the future: we are thinking where to go next if we decide to get rid of Postgres.
 
-### Why do the projects _almost_ independent?
-
-We still hope to leave foreign keys in the tables.
-The data provided by all the indexers depend on Indexer Base.  
-All the indexers may have the dependency to Indexer Accounts, but it will give us circular dependency, that's why we don't use these constraints.
-
 ### Can I create my own indexer?
 
 Sure!
 Feel free to use this project as the example.
 
 ## Linux installation guide
+
+Your `.env` file should be in the project root (`near-microindexers` folder) with the contents:
+```
+AWS_SECRET_ACCESS_KEY=...
+AWS_ACCESS_KEY_ID=...
+DATABASE_URL=...
+RPC_URL=...
+CHAIN_ID=mainnet
+INDEXER_ID=indexer-events-tip
+INDEXER_TYPE=indexer-events
+START_BLOCK_HEIGHT=30181671
+```
+
+- You need to have your own [AWS credentials](https://docs.near.org/tutorials/indexer/credentials) and pay for the S3 requests [around $20 per month](https://github.com/near/near-lake-framework-rs#cost-estimates);
+- You need to create the DB where the data will be stored; you also need to apply the migrations manually.
+- RPC URL could be found [here](https://docs.near.org/api/rpc/providers)
+- CHAIN_ID could be `mainnet` or `testnet`
+- INDEXER_ID could be anything; when you restart your app, it will find the last tracked `block_height` by this id;
+- INDEXER_TYPE could be also anything, but I suggest you to choose between the folders listed in this repo;
+- START_BLOCK_HEIGHT could be any non-negative integer; if the process is restarted, we ignore this field;
 
 ```bash
 sudo apt install git build-essential pkg-config libssl-dev tmux postgresql-client libpq-dev -y
@@ -37,13 +51,12 @@ source $HOME/.cargo/env
 cargo install --version=0.5.13 sqlx-cli --features postgres
 ulimit -n 30000
 cargo build --release
-#!!! here you need to create .env in the root of the project, and .aws in ~
-cargo run --release -- --s3-bucket-name near-lake-data-mainnet --s3-region-name eu-central-1 --start-block-height 9820210
+cargo run --release
 ```
 
 ## Migrations
 
-Unfortunately, migrations do not work if you have several projects writing to the same DB.
+Unfortunately, sqlx migrations do not work if you have several projects writing to the same DB.
 We still use the migrations folder in each project, but we have to apply the changes manually.
 
 ## Creating read-only PostgreSQL user
@@ -85,7 +98,8 @@ Please refer to this [guide](https://github.com/near/near-indexer-for-explorer/b
 ## Why do we need `indexer-balances`? Why `account_changes` table is not enough?
 
 1. `account_changes` has only the absolute value for the balance, while we want to see the delta;
-2. `account_changes` does not have involved account_id.
+2. `account_changes` does not have involved account_id;
+3. We'll stop supporting `account_changes` [soon](https://github.com/near/near-indexer-for-explorer/discussions/351).
 
 `indexer-balances` implementation does non-trivial work with extracting the balance-changing events and storing them in the correct order.
 
@@ -109,7 +123,8 @@ I decided to put `account_changes` data first (just to be consistent)
 ## Why do we need `indexer-events`? Why `assets__*` tables are not enough?
 
 `assets__non_fungible_token_events`, `assets__fungible_token_events` do not have the sorting column.
-In the current solution, we've added artificial `event_index` column.
+In the current solution, we've added artificial `event_index` column.  
+Moreover, we'll stop supporting `assets__fungible_token_events` [soon](https://github.com/near/near-indexer-for-explorer/discussions/351).
 
 The new `fungible_token_events` table stores the data in the format of affected/involved account_id, that simplifies filtering by affected `account_id`.  
 `fungible_token_events` still does not have `absolute_value` column, so you have to collect it from RPC if needed.
@@ -128,3 +143,8 @@ While other indexers are append-only, Indexer Accounts updates the existing reco
 
 `accounts` table in [Indexer For Explorer](https://github.com/near/near-indexer-for-explorer) stored only the first creation and last deletion of the account.  
 This solution stores all the creations/deletions, so accounts may appear in the table more than once.
+
+### What is the current state of Microindexers?
+
+We use `indexer-balances` in production; we use FT part of `indexer-events` in production as well.  
+The other pieces are frozen for now, they need to be upgraded and reviewed before any production usage.
