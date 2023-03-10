@@ -24,9 +24,17 @@ pub(crate) async fn store_balance_changes(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<()> {
     let futures = shards.iter().map(|shard| {
-        store_changes_for_chunk(pool, shard, block_header, balances_cache, json_rpc_client)
+        store_changes_for_chunk(
+            pool,
+            shard,
+            block_header,
+            balances_cache,
+            json_rpc_client,
+            #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
+        )
     });
 
     try_join_all(futures).await.map(|_| ())
@@ -46,6 +54,7 @@ async fn store_changes_for_chunk(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<()> {
     let mut changes: Vec<NearBalanceEvent> = vec![];
     let mut changes_data =
@@ -57,6 +66,7 @@ async fn store_changes_for_chunk(
             block_header,
             balances_cache,
             json_rpc_client,
+            #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
         )
         .await?,
     );
@@ -69,6 +79,7 @@ async fn store_changes_for_chunk(
                 block_header,
                 balances_cache,
                 json_rpc_client,
+                #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
             )
             .await?,
         ),
@@ -82,6 +93,7 @@ async fn store_changes_for_chunk(
             block_header,
             balances_cache,
             json_rpc_client,
+            #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
         )
         .await?,
     );
@@ -200,6 +212,7 @@ async fn store_validator_accounts_update_for_chunk(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
     for new_details in validator_changes {
@@ -208,6 +221,7 @@ async fn store_validator_accounts_update_for_chunk(
             &block_header.prev_hash,
             balances_cache,
             json_rpc_client,
+            #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
         )
         .await?;
         let deltas = get_deltas(&new_details.balance, &prev_balance)?;
@@ -254,6 +268,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
 
@@ -269,6 +284,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
             &block_header.prev_hash,
             balances_cache,
             json_rpc_client,
+            #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
         )
         .await?;
 
@@ -336,6 +352,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
                     &block_header.prev_hash,
                     balances_cache,
                     json_rpc_client,
+                    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
                 )
                 .await?;
                 result.push(NearBalanceEvent {
@@ -387,6 +404,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
 
@@ -414,6 +432,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
                 &block_header.prev_hash,
                 balances_cache,
                 json_rpc_client,
+                #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
             )
             .await?;
 
@@ -462,6 +481,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
                         &block_header.prev_hash,
                         balances_cache,
                         json_rpc_client,
+                        #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
                     )
                     .await?;
                     result.push(NearBalanceEvent {
@@ -509,6 +529,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
                 &block_header.prev_hash,
                 balances_cache,
                 json_rpc_client,
+                #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
             )
             .await?;
             let deltas = get_deltas(&details_after_reward.balance, &prev_balance)?;
@@ -586,6 +607,7 @@ async fn get_balance_retriable(
     block_hash: &near_indexer_primitives::CryptoHash,
     balance_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
     let mut interval = crate::INTERVAL;
     let mut retry_attempt = 0usize;
@@ -601,7 +623,13 @@ async fn get_balance_retriable(
         }
         retry_attempt += 1;
 
-        match get_balance(account_id, block_hash, balance_cache, json_rpc_client).await {
+        match get_balance(
+            account_id,
+            block_hash,
+            balance_cache,
+            json_rpc_client,
+            #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
+        ).await {
             Ok(res) => return Ok(res),
             Err(err) => {
                 tracing::error!(
@@ -626,12 +654,18 @@ async fn get_balance(
     block_hash: &near_indexer_primitives::CryptoHash,
     balance_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
     let mut balances_cache_lock = balance_cache.lock().await;
     let result = match balances_cache_lock.cache_get(account_id) {
         None => {
             let account_balance =
-                match get_account_view(json_rpc_client, account_id, block_hash).await {
+                match get_account_view(
+                    json_rpc_client,
+                    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
+                    account_id,
+                    block_hash,
+                ).await {
                     Ok(account_view) => Ok(crate::BalanceDetails {
                         non_staked: account_view.amount,
                         staked: account_view.locked,
@@ -673,6 +707,7 @@ async fn save_latest_balance(
 
 async fn get_account_view(
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
     account_id: &near_indexer_primitives::types::AccountId,
     block_hash: &near_indexer_primitives::CryptoHash,
 ) -> Result<near_indexer_primitives::views::AccountView, JsonRpcError<RpcQueryError>> {
@@ -686,6 +721,15 @@ async fn get_account_view(
     };
 
     let account_response = json_rpc_client.call(query).await?;
+
+    #[cfg(feature = "rpc-sanity-check")]
+    let account_response = rpc_sanity_check(
+        sanity_json_rpc_client,
+        account_id,
+        block_hash,
+        account_response
+    ).await;
+
     match account_response.kind {
         near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) => {
             Ok(account)
@@ -698,4 +742,63 @@ async fn get_account_view(
             account_response.kind
         ),
     }
+}
+
+// Feature "rpc-sanity-check" performs an extra call to the RPC (RPC_SANITY_CHECK_URL)
+// compares the results and falls back to the RPC_SANITY_CHECK_URL's result in case of mismatch
+// The corresponding warning log is being emitted.
+#[cfg(feature = "rpc-sanity-check")]
+async fn rpc_sanity_check(
+    sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    account_id: &near_indexer_primitives::types::AccountId,
+    block_hash: &near_indexer_primitives::CryptoHash,
+    account_response: near_jsonrpc_primitives::types::query::RpcQueryResponse,
+) -> near_jsonrpc_primitives::types::query::RpcQueryResponse {
+    let query = near_jsonrpc_client::methods::query::RpcQueryRequest {
+        block_reference: near_primitives::types::BlockReference::BlockId(
+            near_primitives::types::BlockId::Hash(*block_hash),
+        ),
+        request: near_primitives::views::QueryRequest::ViewAccount {
+            account_id: account_id.clone(),
+        },
+    };
+
+    let sanity_check_account_response = match sanity_json_rpc_client.call(query).await {
+        Ok(res) => res,
+        Err(err) => {
+            tracing::error!(
+                target: crate::LOGGING_PREFIX,
+                "RPC sanity check call failed with error \n{:#?}\n
+                Returning the result from RPC_URL. Data sanity might be corrupted!",
+                err,
+            );
+            return account_response;
+        }
+    };
+
+    // We have to unpack the AccountView in order to compare the results
+    // Since near_jsonrpc_primitives::types::query::RpcQueryResponse doesn't implement Eq
+    // While it is an extra work it should be fine since we're not going to run it in production
+    if let near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) = &account_response.kind {
+        if let near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(sanity_check_account) = &sanity_check_account_response.kind {
+            if account == sanity_check_account {
+                return account_response;
+            } else {
+                tracing::debug!(
+                    target: crate::LOGGING_PREFIX,
+                    "RPC_URL != RPC_SANITY_CHECK_URL\n{:#?}\n{:#?}",
+                    account,
+                    sanity_check_account,
+                );
+                tracing::warn!(
+                    target: crate::LOGGING_PREFIX,
+                    "RPC sanity check failed for {} at block {}\nFalling back to the RPC_SANITY_CHECK_URL result to prevent errors in the data",
+                    account_id.to_string(),
+                    block_hash.to_string(),
+                );
+                return sanity_check_account_response;
+            }
+        }
+    }
+    sanity_check_account_response
 }

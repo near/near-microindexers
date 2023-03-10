@@ -37,6 +37,9 @@ pub struct Opts {
     /// NEAR JSON RPC URL
     #[clap(long, short, env)]
     pub rpc_url: Option<String>,
+    #[cfg(feature = "rpc-sanity-check")]
+    #[clap(long, env)]
+    pub rpc_sanity_check_url: Option<String>,
     // Chain ID: testnet or mainnet, used for NEAR Lake initialization
     #[clap(long, env, arg_enum)]
     pub chain_id: ChainId,
