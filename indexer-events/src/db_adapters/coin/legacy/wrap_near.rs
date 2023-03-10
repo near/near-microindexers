@@ -44,7 +44,24 @@ pub(crate) async fn collect_wrap_near(
         }
         if let ReceiptEnumView::Action { actions, .. } = &outcome.receipt.receipt {
             for action in actions {
-                events.extend(process_wrap_near_functions(block_header, action, outcome).await?);
+                match action {
+                    ActionView::Delegate {
+                        delegate_action, ..
+                    } => {
+                        for non_delegate_action in &delegate_action.actions {
+                            events.extend(
+                                process_wrap_near_functions(
+                                    block_header,
+                                    &coin::legacy::to_action_view(non_delegate_action.clone()),
+                                    outcome,
+                                )
+                                .await?,
+                            )
+                        }
+                    }
+                    _ => events
+                        .extend(process_wrap_near_functions(block_header, action, outcome).await?),
+                }
             }
         }
     }
