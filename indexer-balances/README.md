@@ -2,16 +2,15 @@
 
 See the [full README for the project in the root](../README.md)
 
-## Features
+## EXPETIMENTAL
 
-`indexer-balances` has a feature `rpc-sanity-check` introduced to be able to test out the alternative RPC services.
+`indexer-balances` in this experimental branch requires `EXPERIMENTAL_RPC_URL` to be provided. This is made to experiment with an alternative RPC service.
 
-Enabling this feature will require to provide `RPC_SANITY_CHECK_URL` which is expected to point to the NEAR RPC address:
-- https://mainnet.rpc.near.org
-- https://testnet.rpc.near.org
+`EXPERIMENTAL_RPC_URL` should point to experimental RPC server.
 
-While the `RPC_URL` should point to the experimental (alternative) RPC server.
+While the `RPC_URL` should point to the stable RPC server.
 
-If the feature is enabled the indexer performs an extra call to the RPC (`RPC_SANITY_CHECK_URL`)
-and compares the results. It falls back to the `RPC_SANITY_CHECK_URL`'s result in case of mismatch.
+The indexer performs an extra call to the RPC (`EXPERIMENTAL_RPC_URL`)
+and compares the results. It uses the `RPC_URL`'s result in case of a mismatch and uses the results from `EXPERIMENTAL_RPC_URL` if the results match.
+
 The corresponding warning log is being emitted in this case.

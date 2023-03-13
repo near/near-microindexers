@@ -46,12 +46,11 @@ async fn main() -> anyhow::Result<()> {
         .expect("RPC_URL is required to run indexer-balances");
     let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
 
-    #[cfg(feature = "rpc-sanity-check")]
-    let sanity_json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(
+    let experimental_rpc = near_jsonrpc_client::JsonRpcClient::connect(
         opts
-            .rpc_sanity_check_url
+            .experimental_rpc_url
             .as_ref()
-            .expect("RPC_SANITY_CHECK_URL is required to run indexer-balances with `rpc-sanity-check` feature enabled"),
+            .expect("EXPERIMENTAL_RPC_URL is required to run indexer-balances"),
     );
 
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
@@ -72,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
                 &pool,
                 &balances_cache,
                 &json_rpc_client,
-                #[cfg(feature = "rpc-sanity-check")] &sanity_json_rpc_client,
+                &experimental_rpc,
             )
         })
         .buffer_unordered(1usize);
@@ -114,7 +113,7 @@ async fn handle_streamer_message(
     pool: &sqlx::Pool<sqlx::Postgres>,
     balances_cache: &BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
-    #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    experimental_rpc: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<u64> {
     metrics::BLOCK_PROCESSED_TOTAL.inc();
     // Prometheus Gauge Metric type do not support u64
@@ -127,7 +126,7 @@ async fn handle_streamer_message(
         &streamer_message.block.header,
         balances_cache,
         json_rpc_client,
-        #[cfg(feature = "rpc-sanity-check")] sanity_json_rpc_client,
+        experimental_rpc,
     )
     .await?;
 
