@@ -127,6 +127,9 @@ pub(crate) fn extract_action_type_and_value_from_action_view(
                 "beneficiary_id": beneficiary_id,
             }),
         ),
+        near_indexer_primitives::views::ActionView::Delegate { .. } => {
+            todo!("near-indexer-base has to be rewritten before considering any usage")
+        }
     }
 }
 

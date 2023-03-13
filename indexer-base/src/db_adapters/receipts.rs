@@ -360,9 +360,9 @@ async fn store_receipt_actions(
         .iter()
         .filter_map(|(index, tx, receipt)| {
             models::ActionReceipt::try_from_action_receipt_view(
-                *receipt,
+                receipt,
                 &block_header.hash,
-                *tx,
+                tx,
                 chunk_header,
                 *index as i32,
                 block_header.timestamp,

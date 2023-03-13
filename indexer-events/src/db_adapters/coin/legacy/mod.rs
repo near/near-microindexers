@@ -57,3 +57,9 @@ pub(crate) async fn collect_legacy(
     events.extend(wrap_near_events);
     Ok(events)
 }
+
+pub(crate) fn to_action_view(
+    action: near_primitives::delegate_action::NonDelegateAction,
+) -> near_primitives::views::ActionView {
+    near_primitives::views::ActionView::from(near_primitives::transaction::Action::from(action))
+}
