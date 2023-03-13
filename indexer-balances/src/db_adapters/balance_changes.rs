@@ -629,7 +629,9 @@ async fn get_balance_retriable(
             balance_cache,
             json_rpc_client,
             experimental_rpc,
-        ).await {
+        )
+        .await
+        {
             Ok(res) => return Ok(res),
             Err(err) => {
                 tracing::error!(
@@ -660,12 +662,9 @@ async fn get_balance(
     let result = match balances_cache_lock.cache_get(account_id) {
         None => {
             let account_balance =
-                match get_account_view(
-                    json_rpc_client,
-                    experimental_rpc,
-                    account_id,
-                    block_hash,
-                ).await {
+                match get_account_view(json_rpc_client, experimental_rpc, account_id, block_hash)
+                    .await
+                {
                     Ok(account_view) => Ok(crate::BalanceDetails {
                         non_staked: account_view.amount,
                         staked: account_view.locked,
@@ -722,12 +721,8 @@ async fn get_account_view(
 
     let account_response = json_rpc_client.call(query).await?;
 
-    let account_response = rpc_sanity_check(
-        experimental_rpc,
-        account_id,
-        block_hash,
-        account_response
-    ).await;
+    let account_response =
+        rpc_sanity_check(experimental_rpc, account_id, block_hash, account_response).await;
 
     match account_response.kind {
         near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) => {
@@ -777,8 +772,13 @@ async fn rpc_sanity_check(
     // We have to unpack the AccountView in order to compare the results
     // Since near_jsonrpc_primitives::types::query::RpcQueryResponse doesn't implement Eq
     // While it is an extra work it should be fine since we're not going to run it in production
-    if let near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) = &account_response.kind {
-        if let near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(sanity_check_account) = &sanity_check_account_response.kind {
+    if let near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) =
+        &account_response.kind
+    {
+        if let near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(
+            sanity_check_account,
+        ) = &sanity_check_account_response.kind
+        {
             if account == sanity_check_account {
                 return sanity_check_account_response;
             } else {

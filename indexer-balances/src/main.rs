@@ -47,8 +47,7 @@ async fn main() -> anyhow::Result<()> {
     let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
 
     let experimental_rpc = near_jsonrpc_client::JsonRpcClient::connect(
-        opts
-            .experimental_rpc_url
+        opts.experimental_rpc_url
             .as_ref()
             .expect("EXPERIMENTAL_RPC_URL is required to run indexer-balances"),
     );

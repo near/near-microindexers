@@ -32,6 +32,3 @@ near-lake-framework = "0.6.1"
 near-primitives = "0.15.0"
 
 indexer-opts = { path = "../indexer-opts" }
-
-[features]
-rpc-sanity-check = ["indexer-opts/rpc-sanity-check"]
