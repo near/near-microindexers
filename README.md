@@ -36,7 +36,7 @@ INDEXER_TYPE=indexer-events
 START_BLOCK_HEIGHT=30181671
 ```
 
-- You need to have your own [AWS credentials](https://docs.near.org/tutorials/indexer/credentials) and pay for the S3 requests [around $20 per month](https://github.com/near/near-lake-framework-rs#cost-estimates);
+- You need to have your own [AWS credentials](https://docs.near.org/tutorials/indexer/credentials) and pay for the S3 requests [around $20 per month to follow the tip of the network](https://github.com/near/near-lake-framework-rs#cost-estimates);
 - You need to create the DB where the data will be stored; you also need to apply the migrations manually.
 - RPC URL could be found [here](https://docs.near.org/api/rpc/providers)
 - CHAIN_ID could be `mainnet` or `testnet`
