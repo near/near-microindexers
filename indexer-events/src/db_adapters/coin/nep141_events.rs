@@ -5,7 +5,6 @@ use crate::db_adapters::{coin, events, get_base};
 use crate::models::fungible_token_events::FungibleTokenEvent;
 use bigdecimal::BigDecimal;
 use near_lake_framework::near_indexer_primitives;
-use near_primitives::types::AccountId;
 use std::ops::Mul;
 use std::str::FromStr;
 
@@ -44,14 +43,14 @@ async fn compose_db_events(
             for mint_event in mint_events {
                 // We filter such things later; I add this check here
                 // only because sweatcoin produces too many such events and we want to ignore them in the early beginning
-                if mint_event.amount == "0" {
+                if mint_event.amount.0 == 0 {
                     continue;
                 }
                 let base = get_base(Event::Nep141, outcome, block_header)?;
                 let custom = coin::FtEvent {
-                    affected_id: AccountId::from_str(&mint_event.owner_id)?,
+                    affected_id: mint_event.owner_id.clone(),
                     involved_id: None,
-                    delta: BigDecimal::from_str(&mint_event.amount)?,
+                    delta: BigDecimal::from_str(&mint_event.amount.0.to_string())?,
                     cause: "MINT".to_string(),
                     memo: mint_event
                         .memo
@@ -65,9 +64,10 @@ async fn compose_db_events(
             for transfer_event in transfer_events {
                 let base = get_base(Event::Nep141, outcome, block_header)?;
                 let custom = coin::FtEvent {
-                    affected_id: AccountId::from_str(&transfer_event.old_owner_id)?,
-                    involved_id: Some(AccountId::from_str(&transfer_event.new_owner_id)?),
-                    delta: BigDecimal::from_str(&transfer_event.amount)?.mul(BigDecimal::from(-1)),
+                    affected_id: transfer_event.old_owner_id.clone(),
+                    involved_id: Some(transfer_event.new_owner_id.clone()),
+                    delta: BigDecimal::from_str(&transfer_event.amount.0.to_string())?
+                        .mul(BigDecimal::from(-1)),
                     cause: "TRANSFER".to_string(),
                     memo: transfer_event
                         .memo
@@ -78,9 +78,9 @@ async fn compose_db_events(
 
                 let base = get_base(Event::Nep141, outcome, block_header)?;
                 let custom = coin::FtEvent {
-                    affected_id: AccountId::from_str(&transfer_event.new_owner_id)?,
-                    involved_id: Some(AccountId::from_str(&transfer_event.old_owner_id)?),
-                    delta: BigDecimal::from_str(&transfer_event.amount)?,
+                    affected_id: transfer_event.new_owner_id.clone(),
+                    involved_id: Some(transfer_event.old_owner_id.clone()),
+                    delta: BigDecimal::from_str(&transfer_event.amount.0.to_string())?,
                     cause: "TRANSFER".to_string(),
                     memo: transfer_event
                         .memo
@@ -94,9 +94,10 @@ async fn compose_db_events(
             for burn_event in burn_events {
                 let base = get_base(Event::Nep141, outcome, block_header)?;
                 let custom = coin::FtEvent {
-                    affected_id: AccountId::from_str(&burn_event.owner_id)?,
+                    affected_id: burn_event.owner_id.clone(),
                     involved_id: None,
-                    delta: BigDecimal::from_str(&burn_event.amount)?.mul(BigDecimal::from(-1)),
+                    delta: BigDecimal::from_str(&burn_event.amount.0.to_string())?
+                        .mul(BigDecimal::from(-1)),
                     cause: "BURN".to_string(),
                     memo: burn_event
                         .memo

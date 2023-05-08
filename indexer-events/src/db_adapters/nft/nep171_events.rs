@@ -50,9 +50,7 @@ fn compose_nft_db_events(
                         cause: "MINT".to_string(),
                         status: get_status(&outcome.execution_outcome.outcome.status),
                         old_owner_account_id: None,
-                        new_owner_account_id: Some(
-                            mint_event.owner_id.escape_default().to_string(),
-                        ),
+                        new_owner_account_id: Some(mint_event.owner_id.to_string()),
                         authorized_account_id: None,
                         event_memo: mint_event
                             .memo
@@ -75,12 +73,8 @@ fn compose_nft_db_events(
                         token_id: token_id.escape_default().to_string(),
                         cause: "TRANSFER".to_string(),
                         status: get_status(&outcome.execution_outcome.outcome.status),
-                        old_owner_account_id: Some(
-                            transfer_event.old_owner_id.escape_default().to_string(),
-                        ),
-                        new_owner_account_id: Some(
-                            transfer_event.new_owner_id.escape_default().to_string(),
-                        ),
+                        old_owner_account_id: Some(transfer_event.old_owner_id.to_string()),
+                        new_owner_account_id: Some(transfer_event.new_owner_id.to_string()),
                         authorized_account_id: transfer_event
                             .authorized_id
                             .as_ref()
@@ -106,9 +100,7 @@ fn compose_nft_db_events(
                         token_id: token_id.escape_default().to_string(),
                         cause: "BURN".to_string(),
                         status: get_status(&outcome.execution_outcome.outcome.status),
-                        old_owner_account_id: Some(
-                            burn_event.owner_id.escape_default().to_string(),
-                        ),
+                        old_owner_account_id: Some(burn_event.owner_id.to_string()),
                         new_owner_account_id: None,
                         authorized_account_id: burn_event
                             .authorized_id

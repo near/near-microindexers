@@ -1,4 +1,7 @@
+use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
+
+use crate::db_adapters::numeric_types::U128;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "standard")]
@@ -28,23 +31,23 @@ pub(crate) enum Nep141EventKind {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct FtMintData {
-    pub owner_id: String,
-    pub amount: String,
+    pub owner_id: AccountId,
+    pub amount: U128,
     pub memo: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct FtTransferData {
-    pub old_owner_id: String,
-    pub new_owner_id: String,
-    pub amount: String,
+    pub old_owner_id: AccountId,
+    pub new_owner_id: AccountId,
+    pub amount: U128,
     pub memo: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct FtBurnData {
-    pub owner_id: String,
-    pub amount: String,
+    pub owner_id: AccountId,
+    pub amount: U128,
     pub memo: Option<String>,
 }
 
@@ -68,7 +71,7 @@ pub(crate) enum Nep171EventKind {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct NftMintData {
-    pub owner_id: String,
+    pub owner_id: AccountId,
     pub token_ids: Vec<String>,
     pub memo: Option<String>,
 }
@@ -76,8 +79,8 @@ pub(crate) struct NftMintData {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct NftTransferData {
     pub authorized_id: Option<String>,
-    pub old_owner_id: String,
-    pub new_owner_id: String,
+    pub old_owner_id: AccountId,
+    pub new_owner_id: AccountId,
     pub token_ids: Vec<String>,
     pub memo: Option<String>,
 }
@@ -85,7 +88,7 @@ pub(crate) struct NftTransferData {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct NftBurnData {
     pub authorized_id: Option<String>,
-    pub owner_id: String,
+    pub owner_id: AccountId,
     pub token_ids: Vec<String>,
     pub memo: Option<String>,
 }
