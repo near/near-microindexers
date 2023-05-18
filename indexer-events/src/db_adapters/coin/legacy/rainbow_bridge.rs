@@ -20,6 +20,13 @@ struct FtTransfer {
     pub receiver_id: AccountId,
     pub amount: numeric_types::U128,
     pub memo: Option<String>,
+    // https://explorer.near.org/transactions/6PamJFeTSkcncpaNQwGr3F7VaH64pNwVnqMFDFdF4Txd#4HzoQHKjf1N41g5ppZhqtv3anaQZod6En9U25QGnWGmC
+    // Usually people pass args as the dict, but in tx above it's a list
+    // "Classic" args as the reference:
+    // https://explorer.near.org/transactions/8mkXd67wxzdgtP1v1GE4a6PWcSPtQ1W6Sjh3CNkjc6bK#EQjU8UqeEx8E67HPhYGvUUrCSg6kb9rYREuz72GfwWCm
+    // We can ignore this field, it's internal info of the contracts, we have it here only to help serde
+    #[allow(dead_code)]
+    pub msg: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
