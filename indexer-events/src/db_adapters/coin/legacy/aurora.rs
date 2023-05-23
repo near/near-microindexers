@@ -186,7 +186,12 @@ async fn process_aurora_functions(
                     }
                     ExecutionStatusView::SuccessValue(_)
                     | ExecutionStatusView::SuccessReceiptId(_) => {
-                        anyhow::bail!(err)
+                        tracing::warn!(
+                            target: crate::LOGGING_PREFIX,
+                            "Aurora: unable to parse FtTransferArgs: {}",
+                            err
+                        );
+                        return handle_broken_transfer(block_header, outcome, args).await;
                     }
                 }
             }
@@ -313,4 +318,51 @@ async fn process_aurora_functions(
         outcome.receipt.receipt_id
     );
     Ok(vec![])
+}
+
+// We met a transfer to invalid near account
+// https://explorer.near.org/transactions/HKLVudra9nYdtuFBncFipSveZ5d6D1TbHGfAnM4S2rWg
+// Aurora said they will fix this, so we should use this code once and never meet this again
+async fn handle_broken_transfer(
+    block_header: &near_indexer_primitives::views::BlockHeaderView,
+    outcome: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
+    args: &[u8],
+) -> anyhow::Result<Vec<FungibleTokenEvent>> {
+    #[derive(Deserialize, Debug, Clone)]
+    struct FtBrokenTransfer {
+        pub receiver_id: String,
+        pub amount: numeric_types::U128,
+        pub memo: Option<String>,
+    }
+
+    let args = match serde_json::from_slice::<FtBrokenTransfer>(args) {
+        Ok(x) => x,
+        Err(err) => {
+            match outcome.execution_outcome.outcome.status {
+                // We couldn't parse args for failed receipt. Let's just ignore it, we can't save it properly
+                ExecutionStatusView::Unknown | ExecutionStatusView::Failure(_) => {
+                    return Ok(vec![])
+                }
+                ExecutionStatusView::SuccessValue(_) | ExecutionStatusView::SuccessReceiptId(_) => {
+                    anyhow::bail!(err)
+                }
+            }
+        }
+    };
+
+    let negative_delta =
+        BigDecimal::from_str(&args.amount.0.to_string())?.mul(BigDecimal::from(-1));
+    let base = db_adapters::get_base(Event::Aurora, outcome, block_header)?;
+    let custom = coin::FtEvent {
+        affected_id: outcome.receipt.predecessor_id.clone(),
+        involved_id: None,
+        delta: negative_delta,
+        cause: "BURN".to_string(),
+        memo: Some(format!(
+            "{:?}\n Unable to make transfer to invalid account {}",
+            args.memo, args.receiver_id
+        )),
+    };
+
+    Ok(vec![coin::build_event(base, custom).await?])
 }
