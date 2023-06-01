@@ -1,3 +1,5 @@
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 pub(crate) fn init_tracing(debug: bool) -> anyhow::Result<()> {
@@ -29,14 +31,14 @@ pub(crate) fn init_tracing(debug: bool) -> anyhow::Result<()> {
         }
     }
 
-    let subscriber = tracing_subscriber::fmt::Subscriber::builder()
-        .with_env_filter(env_filter)
-        .with_writer(std::io::stderr);
+    let subscriber = tracing_subscriber::Registry::default().with(env_filter);
 
     if std::env::var("ENABLE_JSON_LOGS").is_ok() {
-        subscriber.json().init();
+        subscriber.with(tracing_stackdriver::layer()).try_init()?;
     } else {
-        subscriber.compact().init();
+        subscriber
+            .with(tracing_subscriber::fmt::Layer::default().compact())
+            .try_init()?;
     }
 
     Ok(())
