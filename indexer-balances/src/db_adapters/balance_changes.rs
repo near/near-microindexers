@@ -203,48 +203,73 @@ async fn store_validator_accounts_update_for_chunk(
     balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
-    let mut result: Vec<NearBalanceEvent> = vec![];
-    for new_details in validator_changes {
-        let prev_balance = get_balance_retriable(
-            &new_details.account_id,
-            &block_header.prev_hash,
-            balances_cache,
-            json_rpc_client,
-        )
-        .await?;
-        let deltas = get_deltas(&new_details.balance, &prev_balance)?;
-        save_latest_balance(
-            new_details.account_id.clone(),
-            &new_details.balance,
-            balances_cache,
-        )
-        .await;
+    let handles = validator_changes.iter().map(|updated_validator_balance| {
+        let updated_validator_balance = updated_validator_balance.clone();
+        let block_header = block_header.clone();
+        let balances_cache = balances_cache.clone();
+        let json_rpc_client = json_rpc_client.clone();
 
-        result.push(NearBalanceEvent {
-            event_index: BigDecimal::zero(), // will enumerate later
-            block_timestamp: block_header.timestamp.into(),
-            block_height: block_header.height.into(),
-            receipt_id: None,
-            transaction_hash: None,
-            affected_account_id: new_details.account_id.to_string(),
-            involved_account_id: None,
-            direction: crate::models::Direction::Inbound.print().to_string(),
-            cause: crate::models::Cause::ValidatorsReward.print().to_string(),
-            status: ExecutionStatusView::SuccessValue(vec![])
-                .print()
-                .to_string(),
-            delta_nonstaked_amount: deltas.0,
-            absolute_nonstaked_amount: BigDecimal::from_str(
-                &new_details.balance.non_staked.to_string(),
+        tokio::spawn(async move {
+            generate_validator_balance_event(
+                &updated_validator_balance,
+                &block_header,
+                &balances_cache,
+                &json_rpc_client,
             )
-            .unwrap(),
-            delta_staked_amount: deltas.1,
-            absolute_staked_amount: BigDecimal::from_str(&new_details.balance.staked.to_string())
-                .unwrap(),
-        });
+            .await
+        })
+    });
+
+    let mut validator_balance_events: Vec<NearBalanceEvent> = vec![];
+
+    for handle_result in try_join_all(handles).await? {
+        match handle_result {
+            Ok(validator_balance_event) => validator_balance_events.push(validator_balance_event),
+            Err(e) => anyhow::bail!("Failed to process validator change: {}", e),
+        }
     }
 
-    Ok(result)
+    Ok(validator_balance_events)
+}
+
+async fn generate_validator_balance_event(
+    updated_balance: &crate::AccountWithBalance,
+    block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
+    json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+) -> anyhow::Result<NearBalanceEvent> {
+    let previous_balance = get_balance_retriable(
+        &updated_balance.account_id,
+        &block_header.prev_hash,
+        balances_cache,
+        json_rpc_client,
+    )
+    .await?;
+
+    let deltas = get_deltas(&updated_balance.balance, &previous_balance)?;
+
+    Ok(NearBalanceEvent {
+        event_index: BigDecimal::zero(), // will enumerate later
+        block_timestamp: block_header.timestamp.into(),
+        block_height: block_header.height.into(),
+        receipt_id: None,
+        transaction_hash: None,
+        affected_account_id: updated_balance.account_id.to_string(),
+        involved_account_id: None,
+        direction: crate::models::Direction::Inbound.print().to_string(),
+        cause: crate::models::Cause::ValidatorsReward.print().to_string(),
+        status: ExecutionStatusView::SuccessValue(vec![])
+            .print()
+            .to_string(),
+        delta_nonstaked_amount: deltas.0,
+        absolute_nonstaked_amount: BigDecimal::from_str(
+            &updated_balance.balance.non_staked.to_string(),
+        )
+        .unwrap(),
+        delta_staked_amount: deltas.1,
+        absolute_staked_amount: BigDecimal::from_str(&updated_balance.balance.staked.to_string())
+            .unwrap(),
+    })
 }
 
 async fn store_transaction_execution_outcomes_for_chunk(
