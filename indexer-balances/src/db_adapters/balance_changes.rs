@@ -60,11 +60,12 @@ async fn store_changes_for_chunk(
         )
         .await?,
     );
+
     match shard.chunk.as_ref().map(|chunk| &chunk.transactions) {
         None => {}
-        Some(x) => changes.extend(
+        Some(transactions) => changes.extend(
             store_transaction_execution_outcomes_for_chunk(
-                x,
+                transactions,
                 &mut changes_data.transactions,
                 block_header,
                 balances_cache,
@@ -91,6 +92,7 @@ async fn store_changes_for_chunk(
     for (i, change) in changes.iter_mut().enumerate() {
         change.event_index = BigDecimal::from_str(&(start_from_index + i as u128).to_string())?;
     }
+
     crate::models::chunked_insert(pool, &changes, 10).await?;
     Ok(())
 }
@@ -99,7 +101,7 @@ fn collect_data_from_balance_changes(
     state_changes: &near_indexer_primitives::views::StateChangesView,
     block_height: u64,
 ) -> anyhow::Result<AccountChangesBalances> {
-    let mut result: AccountChangesBalances = Default::default();
+    let mut result = AccountChangesBalances::default();
 
     for state_change_with_cause in state_changes {
         let near_indexer_primitives::views::StateChangeWithCauseView { cause, value } =
