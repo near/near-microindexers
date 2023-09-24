@@ -44,13 +44,15 @@ async fn store_changes_for_chunk(
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<()> {
-    let mut changes: Vec<NearBalanceEvent> = vec![];
-    let mut changes_data =
-        collect_data_from_balance_changes(&shard.state_changes, block_header.height)?;
+    let mut balance_events: Vec<NearBalanceEvent> = vec![];
+
+    let mut balance_changes =
+        collect_balance_changes_from_state_changes(&shard.state_changes, block_header.height)?;
+
     // We should collect these 3 groups sequentially because they all share the same cache
-    changes.extend(
+    balance_events.extend(
         store_validator_accounts_update_for_chunk(
-            &changes_data.validators,
+            &balance_changes.validators,
             block_header,
             json_rpc_client,
         )
@@ -59,10 +61,10 @@ async fn store_changes_for_chunk(
 
     match shard.chunk.as_ref().map(|chunk| &chunk.transactions) {
         None => {}
-        Some(transactions) => changes.extend(
+        Some(transactions) => balance_events.extend(
             store_transaction_execution_outcomes_for_chunk(
                 transactions,
-                &mut changes_data.transactions,
+                &mut balance_changes.transactions,
                 block_header,
                 json_rpc_client,
             )
@@ -70,11 +72,11 @@ async fn store_changes_for_chunk(
         ),
     }
 
-    changes.extend(
+    balance_events.extend(
         store_receipt_execution_outcomes_for_chunk(
             &shard.receipt_execution_outcomes,
-            &mut changes_data.receipts,
-            &mut changes_data.rewards,
+            &mut balance_changes.receipts,
+            &mut balance_changes.rewards,
             block_header,
             json_rpc_client,
         )
@@ -83,15 +85,16 @@ async fn store_changes_for_chunk(
 
     let start_from_index: u128 = (block_header.timestamp as u128) * 100_000_000 * 100_000_000
         + (shard.shard_id as u128) * 10_000_000;
-    for (i, change) in changes.iter_mut().enumerate() {
+    for (i, change) in balance_events.iter_mut().enumerate() {
         change.event_index = BigDecimal::from_str(&(start_from_index + i as u128).to_string())?;
     }
 
-    crate::models::chunked_insert(pool, &changes, 10).await?;
+    crate::models::chunked_insert(pool, &balance_events, 10).await?;
+
     Ok(())
 }
 
-fn collect_data_from_balance_changes(
+fn collect_balance_changes_from_state_changes(
     state_changes: &near_indexer_primitives::views::StateChangesView,
     block_height: u64,
 ) -> anyhow::Result<AccountChangesBalances> {
@@ -101,7 +104,7 @@ fn collect_data_from_balance_changes(
         let near_indexer_primitives::views::StateChangeWithCauseView { cause, value } =
             state_change_with_cause;
 
-        let account_details = match value {
+        let updated_account_balance = match value {
             near_indexer_primitives::views::StateChangeValueView::AccountUpdate {
                 account_id,
                 account,
@@ -135,19 +138,19 @@ fn collect_data_from_balance_changes(
                 anyhow::bail!("Unexpected state change cause met: {:#?}", cause);
             }
             StateChangeCauseView::ValidatorAccountsUpdate => {
-                result.validators.push(account_details);
+                result.validators.push(updated_account_balance);
             }
             StateChangeCauseView::TransactionProcessing { tx_hash } => {
                 let prev_inserted_item = result
                     .transactions
-                    .insert(*tx_hash, account_details.clone());
+                    .insert(*tx_hash, updated_account_balance.clone());
                 if let Some(details) = prev_inserted_item {
                     anyhow::bail!(
                         "Duplicated balance changes for transaction {} at block_height {}. \
                         One of them may be missed\n{:#?}\n{:#?}",
                         tx_hash.to_string(),
                         block_height,
-                        account_details,
+                        updated_account_balance,
                         details
                     );
                 }
@@ -159,14 +162,14 @@ fn collect_data_from_balance_changes(
             StateChangeCauseView::ActionReceiptGasReward { receipt_hash } => {
                 let prev_inserted_item = result
                     .rewards
-                    .insert(*receipt_hash, account_details.clone());
+                    .insert(*receipt_hash, updated_account_balance.clone());
                 if let Some(details) = prev_inserted_item {
                     anyhow::bail!(
                         "Duplicated balance changes for receipt {} (reward), at block_height {}. \
                         One of them may be missed\n{:#?}\n{:#?}",
                         receipt_hash.to_string(),
                         block_height,
-                        account_details,
+                        updated_account_balance,
                         details
                     );
                 }
@@ -174,14 +177,14 @@ fn collect_data_from_balance_changes(
             StateChangeCauseView::ReceiptProcessing { receipt_hash } => {
                 let prev_inserted_item = result
                     .receipts
-                    .insert(*receipt_hash, account_details.clone());
+                    .insert(*receipt_hash, updated_account_balance.clone());
                 if let Some(details) = prev_inserted_item {
                     anyhow::bail!(
                         "Duplicated balance changes for receipt {} at block_height {}. \
                         One of them may be missed\n{:#?}\n{:#?}",
                         receipt_hash.to_string(),
                         block_height,
-                        account_details,
+                        updated_account_balance,
                         details
                     );
                 }
@@ -383,11 +386,11 @@ async fn generate_transaction_balance_event(
         absolute_staked_amount: BigDecimal::from_str(&updated_balance.staked.to_string()).unwrap(),
     });
 
-    if let Some(account_id) = involved_account_id {
-        if &account_id != affected_account_id {
+    if let Some(involved_account_id) = involved_account_id {
+        if &involved_account_id != affected_account_id {
             // balance is not changing here, we just note the line here
             let balance = get_balance_retriable(
-                &account_id,
+                &involved_account_id,
                 &block_header.prev_hash,
                 json_rpc_client,
             )
@@ -399,7 +402,7 @@ async fn generate_transaction_balance_event(
                 block_height: block_header.height.into(),
                 receipt_id: None,
                 transaction_hash: Some(transaction.transaction.hash.to_string()),
-                affected_account_id: account_id.to_string(),
+                affected_account_id: involved_account_id.to_string(),
                 involved_account_id: Some(affected_account_id.to_string()),
                 direction: crate::models::Direction::Inbound.print().to_string(),
                 cause: crate::models::Cause::Transaction.print().to_string(),
@@ -573,11 +576,11 @@ async fn generate_receipt_balance_event(
     });
 
     // Adding the opposite entry to the DB, just to show that the second account_id was there too
-    if let Some(account_id) = involved_account_id {
-        if &account_id != affected_account_id {
+    if let Some(involved_account_id) = involved_account_id {
+        if &involved_account_id != affected_account_id {
             // balance is not changing here, we just note the line here
             let balance = get_balance_retriable(
-                &account_id,
+                &involved_account_id,
                 &block_header.prev_hash,
                 json_rpc_client,
             )
@@ -588,7 +591,7 @@ async fn generate_receipt_balance_event(
                 block_height: block_header.height.into(),
                 receipt_id: Some(outcome_with_receipt.receipt.receipt_id.to_string()),
                 transaction_hash: None,
-                affected_account_id: account_id.to_string(),
+                affected_account_id: involved_account_id.to_string(),
                 involved_account_id: Some(affected_account_id.to_string()),
                 direction: crate::models::Direction::Outbound.print().to_string(),
                 cause: crate::models::Cause::Receipt.print().to_string(),
