@@ -1,9 +1,7 @@
 // // TODO cleanup imports in all the files in the end
-use cached::SizedCache;
 use futures::StreamExt;
 use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
-use tokio::sync::Mutex;
 
 mod configs;
 mod db_adapters;
@@ -31,9 +29,6 @@ pub struct AccountWithBalance {
     pub balance: BalanceDetails,
 }
 
-pub type BalanceCache =
-    std::sync::Arc<Mutex<SizedCache<near_indexer_primitives::types::AccountId, BalanceDetails>>>;
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
@@ -53,14 +48,8 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(metrics::init_server(opts.port).expect("Failed to start metrics server"));
 
-    // We want to prevent unnecessary RPC queries to find previous balance
-    let balances_cache: BalanceCache =
-        std::sync::Arc::new(Mutex::new(SizedCache::with_size(100_000)));
-
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
-        .map(|streamer_message| {
-            handle_streamer_message(streamer_message, &pool, &balances_cache, &json_rpc_client)
-        })
+        .map(|streamer_message| handle_streamer_message(streamer_message, &pool, &json_rpc_client))
         .buffer_unordered(1usize);
 
     while let Some(handle_message) = handlers.next().await {
@@ -98,7 +87,6 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_streamer_message(
     streamer_message: near_indexer_primitives::StreamerMessage,
     pool: &sqlx::Pool<sqlx::Postgres>,
-    balances_cache: &BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<u64> {
     metrics::BLOCK_PROCESSED_TOTAL.inc();
@@ -110,7 +98,6 @@ async fn handle_streamer_message(
         pool,
         &streamer_message.shards,
         &streamer_message.block.header,
-        balances_cache,
         json_rpc_client,
     )
     .await?;
