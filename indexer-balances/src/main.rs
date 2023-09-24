@@ -89,6 +89,12 @@ async fn handle_streamer_message(
     pool: &sqlx::Pool<sqlx::Postgres>,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<u64> {
+    tracing::info!(
+        target: LOGGING_PREFIX,
+        "Processing block {}",
+        streamer_message.block.header.height
+    );
+
     metrics::BLOCK_PROCESSED_TOTAL.inc();
     // Prometheus Gauge Metric type do not support u64
     // https://github.com/tikv/rust-prometheus/issues/470
