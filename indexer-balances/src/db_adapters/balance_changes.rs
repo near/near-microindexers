@@ -1,4 +1,3 @@
-use cached::Cached;
 use std::collections::HashMap;
 use std::ops::Sub;
 use std::str::FromStr;
@@ -739,48 +738,25 @@ async fn get_balance(
     balance_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
-    let mut balances_cache_lock = balance_cache.lock().await;
-    let result = match balances_cache_lock.cache_get(account_id) {
-        None => {
-            let account_balance =
-                match get_account_view(json_rpc_client, account_id, block_hash).await {
-                    Ok(account_view) => Ok(crate::BalanceDetails {
-                        non_staked: account_view.amount,
-                        staked: account_view.locked,
-                    }),
-                    Err(err) => match err.handler_error() {
-                        Some(RpcQueryError::UnknownAccount { .. }) => Ok(crate::BalanceDetails {
-                            non_staked: 0,
-                            staked: 0,
-                        }),
-                        _ => Err(err.into()),
-                    },
-                };
-            if let Ok(balance) = account_balance {
-                balances_cache_lock.cache_set(account_id.clone(), balance);
-            }
-            account_balance
-        }
-        Some(balance) => Ok(*balance),
-    };
-    drop(balances_cache_lock);
-    result
-}
+    let balances_cache_lock = balance_cache.read().await;
 
-async fn save_latest_balance(
-    account_id: near_indexer_primitives::types::AccountId,
-    balance: &crate::BalanceDetails,
-    balance_cache: &crate::BalanceCache,
-) {
-    let mut balances_cache_lock = balance_cache.lock().await;
-    balances_cache_lock.cache_set(
-        account_id,
-        crate::BalanceDetails {
-            non_staked: balance.non_staked,
-            staked: balance.staked,
+    if let Some(balance) = balances_cache_lock.get(account_id) {
+        return Ok(*balance);
+    }
+
+    match get_account_view(json_rpc_client, account_id, block_hash).await {
+        Ok(account_view) => Ok(crate::BalanceDetails {
+            non_staked: account_view.amount,
+            staked: account_view.locked,
+        }),
+        Err(err) => match err.handler_error() {
+            Some(RpcQueryError::UnknownAccount { .. }) => Ok(crate::BalanceDetails {
+                non_staked: 0,
+                staked: 0,
+            }),
+            _ => Err(err.into()),
         },
-    );
-    drop(balances_cache_lock);
+    }
 }
 
 async fn get_account_view(

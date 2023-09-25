@@ -1,9 +1,9 @@
 // // TODO cleanup imports in all the files in the end
-use cached::SizedCache;
 use futures::StreamExt;
 use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
-use tokio::sync::Mutex;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 mod configs;
 mod db_adapters;
@@ -32,7 +32,7 @@ pub struct AccountWithBalance {
 }
 
 pub type BalanceCache =
-    std::sync::Arc<Mutex<SizedCache<near_indexer_primitives::types::AccountId, BalanceDetails>>>;
+    std::sync::Arc<RwLock<HashMap<near_indexer_primitives::types::AccountId, BalanceDetails>>>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -54,8 +54,7 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(metrics::init_server(opts.port).expect("Failed to start metrics server"));
 
     // We want to prevent unnecessary RPC queries to find previous balance
-    let balances_cache: BalanceCache =
-        std::sync::Arc::new(Mutex::new(SizedCache::with_size(100_000)));
+    let balances_cache: BalanceCache = std::sync::Arc::new(RwLock::new(HashMap::new()));
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
         .map(|streamer_message| {
