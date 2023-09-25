@@ -88,10 +88,20 @@ async fn store_changes_for_chunk(
         .await?,
     );
 
+    let mut balance_cache_lock = balances_cache.write().await;
+
     let start_from_index: u128 = (block_header.timestamp as u128) * 100_000_000 * 100_000_000
         + (shard.shard_id as u128) * 10_000_000;
     for (i, change) in balance_events.iter_mut().enumerate() {
         change.event_index = BigDecimal::from_str(&(start_from_index + i as u128).to_string())?;
+
+        balance_cache_lock.insert(
+            near_primitives::types::AccountId::from_str(&change.affected_account_id)?,
+            crate::BalanceDetails {
+                non_staked: u128::from_str(&change.absolute_nonstaked_amount.to_string())?,
+                staked: u128::from_str(&change.absolute_staked_amount.to_string())?,
+            },
+        );
     }
 
     crate::models::chunked_insert(pool, &balance_events, 10).await?;
