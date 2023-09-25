@@ -1,3 +1,4 @@
+use cached::Cached;
 use std::collections::HashMap;
 use std::ops::Sub;
 use std::str::FromStr;
@@ -21,11 +22,12 @@ pub(crate) async fn store_balance_changes(
     pool: &sqlx::Pool<sqlx::Postgres>,
     shards: &[near_indexer_primitives::IndexerShard],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<()> {
-    let futures = shards
-        .iter()
-        .map(|shard| store_changes_for_chunk(pool, shard, block_header, json_rpc_client));
+    let futures = shards.iter().map(|shard| {
+        store_changes_for_chunk(pool, shard, block_header, balances_cache, json_rpc_client)
+    });
 
     try_join_all(futures).await.map(|_| ())
 }
@@ -42,6 +44,7 @@ async fn store_changes_for_chunk(
     pool: &sqlx::Pool<sqlx::Postgres>,
     shard: &near_indexer_primitives::IndexerShard,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<()> {
     let mut balance_events: Vec<NearBalanceEvent> = vec![];
@@ -54,6 +57,7 @@ async fn store_changes_for_chunk(
         store_validator_accounts_update_for_chunk(
             &balance_changes.validators,
             block_header,
+            balances_cache,
             json_rpc_client,
         )
         .await?,
@@ -66,6 +70,7 @@ async fn store_changes_for_chunk(
                 transactions,
                 &mut balance_changes.transactions,
                 block_header,
+                balances_cache,
                 json_rpc_client,
             )
             .await?,
@@ -78,6 +83,7 @@ async fn store_changes_for_chunk(
             &mut balance_changes.receipts,
             &mut balance_changes.rewards,
             block_header,
+            balances_cache,
             json_rpc_client,
         )
         .await?,
@@ -197,17 +203,20 @@ fn collect_balance_changes_from_state_changes(
 async fn store_validator_accounts_update_for_chunk(
     validator_changes: &[crate::AccountWithBalance],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let handles = validator_changes.iter().map(|updated_validator_balance| {
         let updated_validator_balance = updated_validator_balance.clone();
         let block_header = block_header.clone();
+        let balances_cache = balances_cache.clone();
         let json_rpc_client = json_rpc_client.clone();
 
         tokio::spawn(async move {
             generate_validator_balance_event(
                 &updated_validator_balance,
                 &block_header,
+                &balances_cache,
                 &json_rpc_client,
             )
             .await
@@ -229,11 +238,13 @@ async fn store_validator_accounts_update_for_chunk(
 async fn generate_validator_balance_event(
     updated_balance: &crate::AccountWithBalance,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<NearBalanceEvent> {
     let previous_balance = get_balance_retriable(
         &updated_balance.account_id,
         &block_header.prev_hash,
+        balances_cache,
         json_rpc_client,
     )
     .await?;
@@ -271,6 +282,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
         crate::AccountWithBalance,
     >,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut handles: Vec<tokio::task::JoinHandle<Result<Vec<NearBalanceEvent>, anyhow::Error>>> =
@@ -306,6 +318,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
         let transaction = transaction.clone();
         let block_header = block_header.clone();
         let json_rpc_client = json_rpc_client.clone();
+        let balances_cache = balances_cache.clone();
 
         handles.push(tokio::spawn(async move {
             generate_transaction_balance_event(
@@ -314,6 +327,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
                 updated_account_balance.balance,
                 &transaction,
                 &block_header,
+                &balances_cache,
                 &json_rpc_client,
             )
             .await
@@ -349,6 +363,7 @@ async fn generate_transaction_balance_event(
     updated_balance: crate::BalanceDetails,
     transaction: &near_indexer_primitives::IndexerTransactionWithOutcome,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut transaction_balance_events: Vec<NearBalanceEvent> = vec![];
@@ -356,6 +371,7 @@ async fn generate_transaction_balance_event(
     let previous_balance = get_balance_retriable(
         affected_account_id,
         &block_header.prev_hash,
+        balances_cache,
         json_rpc_client,
     )
     .await?;
@@ -392,6 +408,7 @@ async fn generate_transaction_balance_event(
             let balance = get_balance_retriable(
                 &involved_account_id,
                 &block_header.prev_hash,
+                balances_cache,
                 json_rpc_client,
             )
             .await?;
@@ -430,6 +447,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
     receipt_changes: &mut HashMap<near_indexer_primitives::CryptoHash, crate::AccountWithBalance>,
     reward_changes: &mut HashMap<near_indexer_primitives::CryptoHash, crate::AccountWithBalance>,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut handles: Vec<tokio::task::JoinHandle<Result<Vec<NearBalanceEvent>, anyhow::Error>>> =
@@ -459,6 +477,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
             let outcome_with_receipt = outcome_with_receipt.clone();
             let block_header = block_header.clone();
             let json_rpc_client = json_rpc_client.clone();
+            let balances_cache = balances_cache.clone();
 
             handles.push(tokio::spawn(async move {
                 generate_receipt_balance_event(
@@ -467,6 +486,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
                     updated_account_balance.balance,
                     &outcome_with_receipt,
                     &block_header,
+                    &balances_cache,
                     &json_rpc_client,
                 )
                 .await
@@ -489,6 +509,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
             let outcome_with_receipt = outcome_with_receipt.clone();
             let block_header = block_header.clone();
             let json_rpc_client = json_rpc_client.clone();
+            let balances_cache = balances_cache.clone();
 
             handles.push(tokio::spawn(async move {
                 generate_receipt_rewards_balance_event(
@@ -497,6 +518,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
                     updated_account_balance.balance,
                     &outcome_with_receipt,
                     &block_header,
+                    &balances_cache,
                     &json_rpc_client,
                 )
                 .await
@@ -539,6 +561,7 @@ async fn generate_receipt_balance_event(
     updated_balance: crate::BalanceDetails,
     outcome_with_receipt: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut receipt_balance_events: Vec<NearBalanceEvent> = vec![];
@@ -546,6 +569,7 @@ async fn generate_receipt_balance_event(
     let previous_balance = get_balance_retriable(
         affected_account_id,
         &block_header.prev_hash,
+        balances_cache,
         json_rpc_client,
     )
     .await?;
@@ -582,6 +606,7 @@ async fn generate_receipt_balance_event(
             let balance = get_balance_retriable(
                 &involved_account_id,
                 &block_header.prev_hash,
+                balances_cache,
                 json_rpc_client,
             )
             .await?;
@@ -619,11 +644,13 @@ async fn generate_receipt_rewards_balance_event(
     updated_balance: crate::BalanceDetails,
     outcome_with_receipt: &near_indexer_primitives::IndexerExecutionOutcomeWithReceipt,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
+    balances_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let previous_balance = get_balance_retriable(
         affected_account_id,
         &block_header.prev_hash,
+        balances_cache,
         json_rpc_client,
     )
     .await?;
@@ -669,6 +696,7 @@ fn get_deltas(
 async fn get_balance_retriable(
     account_id: &near_indexer_primitives::types::AccountId,
     block_hash: &near_indexer_primitives::CryptoHash,
+    balance_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
     let mut interval = crate::INTERVAL;
@@ -685,7 +713,7 @@ async fn get_balance_retriable(
         }
         retry_attempt += 1;
 
-        match get_balance(account_id, block_hash, json_rpc_client).await {
+        match get_balance(account_id, block_hash, balance_cache, json_rpc_client).await {
             Ok(res) => return Ok(res),
             Err(err) => {
                 tracing::error!(
@@ -708,21 +736,51 @@ async fn get_balance_retriable(
 async fn get_balance(
     account_id: &near_indexer_primitives::types::AccountId,
     block_hash: &near_indexer_primitives::CryptoHash,
+    balance_cache: &crate::BalanceCache,
     json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
-    match get_account_view(json_rpc_client, account_id, block_hash).await {
-        Ok(account_view) => Ok(crate::BalanceDetails {
-            non_staked: account_view.amount,
-            staked: account_view.locked,
-        }),
-        Err(err) => match err.handler_error() {
-            Some(RpcQueryError::UnknownAccount { .. }) => Ok(crate::BalanceDetails {
-                non_staked: 0,
-                staked: 0,
-            }),
-            _ => Err(err.into()),
+    let mut balances_cache_lock = balance_cache.lock().await;
+    let result = match balances_cache_lock.cache_get(account_id) {
+        None => {
+            let account_balance =
+                match get_account_view(json_rpc_client, account_id, block_hash).await {
+                    Ok(account_view) => Ok(crate::BalanceDetails {
+                        non_staked: account_view.amount,
+                        staked: account_view.locked,
+                    }),
+                    Err(err) => match err.handler_error() {
+                        Some(RpcQueryError::UnknownAccount { .. }) => Ok(crate::BalanceDetails {
+                            non_staked: 0,
+                            staked: 0,
+                        }),
+                        _ => Err(err.into()),
+                    },
+                };
+            if let Ok(balance) = account_balance {
+                balances_cache_lock.cache_set(account_id.clone(), balance);
+            }
+            account_balance
+        }
+        Some(balance) => Ok(*balance),
+    };
+    drop(balances_cache_lock);
+    result
+}
+
+async fn save_latest_balance(
+    account_id: near_indexer_primitives::types::AccountId,
+    balance: &crate::BalanceDetails,
+    balance_cache: &crate::BalanceCache,
+) {
+    let mut balances_cache_lock = balance_cache.lock().await;
+    balances_cache_lock.cache_set(
+        account_id,
+        crate::BalanceDetails {
+            non_staked: balance.non_staked,
+            staked: balance.staked,
         },
-    }
+    );
+    drop(balances_cache_lock);
 }
 
 async fn get_account_view(
