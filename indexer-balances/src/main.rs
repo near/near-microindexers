@@ -1,4 +1,5 @@
 // // TODO cleanup imports in all the files in the end
+use async_trait::async_trait;
 use futures::StreamExt;
 use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
@@ -30,6 +31,75 @@ pub struct AccountWithBalance {
     pub balance: BalanceDetails,
 }
 
+#[async_trait]
+trait BalanceClient {
+    async fn get_balance(
+        &self,
+        account_id: &near_indexer_primitives::types::AccountId,
+        block_hash: &near_indexer_primitives::CryptoHash,
+    ) -> anyhow::Result<crate::BalanceDetails>;
+}
+
+struct JsonRpcBalanceClient {
+    json_rpc_client: near_jsonrpc_client::JsonRpcClient,
+}
+
+impl JsonRpcBalanceClient {
+    pub fn new(json_rpc_client: near_jsonrpc_client::JsonRpcClient) -> Self {
+        Self { json_rpc_client }
+    }
+}
+
+#[async_trait::async_trait]
+impl BalanceClient for JsonRpcBalanceClient {
+    async fn get_balance(
+        &self,
+        account_id: &near_indexer_primitives::types::AccountId,
+        block_hash: &near_indexer_primitives::CryptoHash,
+    ) -> anyhow::Result<crate::BalanceDetails> {
+        let query = near_jsonrpc_client::methods::query::RpcQueryRequest {
+            block_reference: near_primitives::types::BlockReference::BlockId(
+                near_primitives::types::BlockId::Hash(*block_hash),
+            ),
+            request: near_primitives::views::QueryRequest::ViewAccount {
+                account_id: account_id.clone(),
+            },
+        };
+
+        let account_response = self.json_rpc_client.call(query).await;
+
+        if let Err(err) = account_response {
+            return match err.handler_error() {
+                Some(near_jsonrpc_primitives::types::query::RpcQueryError::UnknownAccount {
+                    ..
+                }) => Ok(crate::BalanceDetails {
+                    non_staked: 0,
+                    staked: 0,
+                }),
+                _ => Err(err.into()),
+            };
+        }
+
+        let response_kind = account_response.unwrap().kind;
+
+        match response_kind {
+            near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) => {
+                Ok(crate::BalanceDetails {
+                    non_staked: account.amount,
+                    staked: account.locked,
+                })
+            }
+            _ => unreachable!(
+            "Unreachable code! Asked for ViewAccount (block_hash {}, account_id {})\nReceived\n\
+                {:#?}\nReport this to https://github.com/near/near-jsonrpc-client-rs",
+            block_hash.to_string(),
+            account_id.to_string(),
+            response_kind
+        ),
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
@@ -41,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
         .as_ref()
         .expect("RPC_URL is required to run indexer-balances");
     let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
+    let balance_client = JsonRpcBalanceClient::new(json_rpc_client);
 
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
     let lake_config = opts.to_lake_config(&pool).await?;
@@ -53,7 +124,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
         .map(|streamer_message| {
-            handle_streamer_message(streamer_message, &pool, &balances_cache, &json_rpc_client)
+            handle_streamer_message(streamer_message, &pool, &balances_cache, &balance_client)
         })
         .buffer_unordered(1usize);
 
@@ -93,7 +164,7 @@ async fn handle_streamer_message(
     streamer_message: near_indexer_primitives::StreamerMessage,
     pool: &sqlx::Pool<sqlx::Postgres>,
     balances_cache: &cache::BalanceCache,
-    json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    balance_client: &impl BalanceClient,
 ) -> anyhow::Result<u64> {
     metrics::BLOCK_PROCESSED_TOTAL.inc();
     // Prometheus Gauge Metric type do not support u64
@@ -105,7 +176,7 @@ async fn handle_streamer_message(
         &streamer_message.shards,
         &streamer_message.block.header,
         balances_cache,
-        json_rpc_client,
+        balance_client,
     )
     .await?;
 

@@ -3,7 +3,7 @@ use sqlx::Arguments;
 
 use crate::models::FieldCount;
 
-#[derive(Debug, sqlx::FromRow, FieldCount)]
+#[derive(Debug, sqlx::FromRow, FieldCount, PartialEq)]
 pub struct NearBalanceEvent {
     pub event_index: BigDecimal,
     pub block_timestamp: BigDecimal,
