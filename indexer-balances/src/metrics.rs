@@ -30,6 +30,21 @@ lazy_static! {
         "Last seen block height by indexer"
     )
     .unwrap();
+    pub(crate) static ref CACHE_HITS: IntGauge = try_create_int_gauge(
+        "indexer_balances_cache_hits",
+        "total cache hits",
+    )
+    .unwrap();
+    pub(crate) static ref CACHE_MISSES: IntGauge = try_create_int_gauge(
+        "indexer_balances_cache_misses",
+        "total cache misses",
+    )
+    .unwrap();
+    pub(crate) static ref CACHE_SIZE: IntGauge = try_create_int_gauge(
+        "indexer_balances_cache_size",
+        "total cache size",
+    )
+    .unwrap();
 }
 
 #[get("/metrics")]
