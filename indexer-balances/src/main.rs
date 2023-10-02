@@ -203,6 +203,11 @@ async fn handle_streamer_message(
     balances_cache: &cache::BalanceCache,
     balance_client: &impl BalanceClient,
 ) -> anyhow::Result<u64> {
+    tracing::info!(
+        target: LOGGING_PREFIX,
+        "Processing block: {}",
+        streamer_message.block.header.height
+    );
     metrics::BLOCK_PROCESSED_TOTAL.inc();
     // Prometheus Gauge Metric type do not support u64
     // https://github.com/tikv/rust-prometheus/issues/470
