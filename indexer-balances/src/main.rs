@@ -2,7 +2,9 @@
 use async_trait::async_trait;
 use futures::StreamExt;
 use indexer_opts::Parser;
+use models::select_retry_or_panic;
 use near_lake_framework::near_indexer_primitives;
+use std::str::FromStr;
 
 mod cache;
 mod configs;
@@ -36,7 +38,7 @@ trait BalanceClient {
     async fn get_balance(
         &self,
         account_id: &near_indexer_primitives::types::AccountId,
-        block_hash: &near_indexer_primitives::CryptoHash,
+        block_id: &near_primitives::types::BlockId,
     ) -> anyhow::Result<crate::BalanceDetails>;
 }
 
@@ -55,12 +57,10 @@ impl BalanceClient for JsonRpcBalanceClient {
     async fn get_balance(
         &self,
         account_id: &near_indexer_primitives::types::AccountId,
-        block_hash: &near_indexer_primitives::CryptoHash,
+        block_id: &near_primitives::types::BlockId,
     ) -> anyhow::Result<crate::BalanceDetails> {
         let query = near_jsonrpc_client::methods::query::RpcQueryRequest {
-            block_reference: near_primitives::types::BlockReference::BlockId(
-                near_primitives::types::BlockId::Hash(*block_hash),
-            ),
+            block_reference: near_primitives::types::BlockReference::BlockId(block_id.clone()),
             request: near_primitives::views::QueryRequest::ViewAccount {
                 account_id: account_id.clone(),
             },
@@ -90,13 +90,56 @@ impl BalanceClient for JsonRpcBalanceClient {
                 })
             }
             _ => unreachable!(
-            "Unreachable code! Asked for ViewAccount (block_hash {}, account_id {})\nReceived\n\
+                "Unreachable code! Asked for ViewAccount (block_id {:?}, account_id {})\nReceived\n\
                 {:#?}\nReport this to https://github.com/near/near-jsonrpc-client-rs",
-            block_hash.to_string(),
-            account_id.to_string(),
-            response_kind
-        ),
+                block_id,
+                account_id.to_string(),
+                response_kind
+            ),
         }
+    }
+}
+
+struct PgBalanceClient {
+    pool: sqlx::Pool<sqlx::Postgres>,
+}
+
+impl PgBalanceClient {
+    pub fn new(pool: sqlx::Pool<sqlx::Postgres>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl BalanceClient for PgBalanceClient {
+    async fn get_balance(
+        &self,
+        account_id: &near_indexer_primitives::types::AccountId,
+        block_id: &near_primitives::types::BlockId,
+    ) -> anyhow::Result<crate::BalanceDetails> {
+        if let near_primitives::types::BlockId::Hash(_) = block_id {
+            anyhow::bail!("Can not query by hash")
+        }
+
+        let near_primitives::types::BlockId::Height(block_height) = block_id else { unreachable!() };
+
+        let balance_event = match select_retry_or_panic(&self.pool, block_height, account_id, 5)
+            .await
+        {
+            Ok(Some(balance_event)) => BalanceDetails {
+                non_staked: u128::from_str(&balance_event.absolute_nonstaked_amount.to_string())?,
+                staked: u128::from_str(&balance_event.absolute_staked_amount.to_string())?,
+            },
+            // TODO can we trust that DB will have all required values or do we need to check RPC
+            // as well?
+            Ok(None) => BalanceDetails {
+                non_staked: 0,
+                staked: 0,
+            },
+            Err(e) => anyhow::bail!(e),
+        };
+
+        Ok(balance_event)
     }
 }
 
@@ -106,14 +149,8 @@ async fn main() -> anyhow::Result<()> {
     let opts = indexer_opts::Opts::parse();
     configs::init_tracing(opts.debug)?;
 
-    let rpc_url = opts
-        .rpc_url
-        .as_ref()
-        .expect("RPC_URL is required to run indexer-balances");
-    let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
-    let balance_client = JsonRpcBalanceClient::new(json_rpc_client);
-
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
+    let balance_client = PgBalanceClient::new(pool.clone());
     let lake_config = opts.to_lake_config(&pool).await?;
     let (sender, stream) = near_lake_framework::streamer(lake_config);
     let end_block_height = opts.end_block_height.unwrap_or(u64::MAX);

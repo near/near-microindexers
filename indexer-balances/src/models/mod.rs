@@ -1,9 +1,12 @@
 use futures::future::try_join_all;
+use sqlx::{postgres::PgRow, Arguments};
 use std::fmt::Write;
 
 use near_lake_framework::near_indexer_primitives::views::ExecutionStatusView;
 
 pub(crate) use indexer_balances::FieldCount;
+
+use self::balance_changes::NearBalanceEvent;
 pub(crate) mod balance_changes;
 
 pub trait FieldCount {
@@ -28,6 +31,66 @@ pub async fn chunked_insert<T: SqlxMethods + std::fmt::Debug>(
         .chunks(crate::db_adapters::CHUNK_SIZE_FOR_BATCH_INSERT)
         .map(|items_part| insert_retry_or_panic(pool, items_part, retry_count));
     try_join_all(futures).await.map(|_| ())
+}
+
+pub(crate) async fn select_retry_or_panic(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    // query: &str,
+    block_height: &u64,
+    account_id: &str,
+    retry_count: usize,
+) -> anyhow::Result<Option<NearBalanceEvent>> {
+    let mut interval = crate::INTERVAL;
+    let mut retry_attempt = 0usize;
+
+    loop {
+        if retry_attempt == retry_count {
+            return Err(anyhow::anyhow!(
+                "Failed to perform query to database after {} attempts. Stop trying.",
+                retry_count
+            ));
+        }
+        retry_attempt += 1;
+
+        // let mut args = sqlx::postgres::PgArguments::default();
+        // for item in items {
+        //     args.add(item);
+        // }
+
+        let query = r"
+            SELECT *
+            FROM near_balance_events
+            WHERE block_height < $1
+            AND affected_account_id = $2
+            ORDER BY event_index desc
+            LIMIT 1;
+        ";
+
+        match sqlx::query_as::<_, NearBalanceEvent>(query)
+            .bind(*block_height as i64)
+            .bind(account_id)
+            .fetch_optional(pool)
+            .await
+        {
+            Ok(res) => return Ok(res),
+            Err(async_error) => {
+                // todo we print here select with non-filled placeholders. It would be better to get the final select statement here
+                tracing::error!(
+                   target: crate::LOGGING_PREFIX,
+                   "Error occurred during {}:\nFailed SELECT:\n{}\n{}, {}\n Retrying in {} milliseconds...",
+                   async_error,
+                   query,
+                   block_height,
+                   account_id,
+                   interval.as_millis(),
+                );
+                tokio::time::sleep(interval).await;
+                if interval < crate::MAX_DELAY_TIME {
+                    interval *= 2;
+                }
+            }
+        }
+    }
 }
 
 async fn insert_retry_or_panic<T: SqlxMethods + std::fmt::Debug>(

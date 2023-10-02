@@ -221,7 +221,7 @@ async fn store_validator_accounts_update_for_chunk(
     for new_details in validator_changes {
         let prev_balance = get_balance_retriable(
             &new_details.account_id,
-            &block_header.prev_hash,
+            block_header.height,
             balances_cache,
             balance_client,
         )
@@ -279,7 +279,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
 
         let prev_balance = get_balance_retriable(
             affected_account_id,
-            &block_header.prev_hash,
+            block_header.height,
             balances_cache,
             balance_client,
         )
@@ -343,7 +343,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
                 // balance is not changing here, we just note the line here
                 let balance = get_balance_retriable(
                     account_id,
-                    &block_header.prev_hash,
+                    block_header.height,
                     balances_cache,
                     balance_client,
                 )
@@ -421,7 +421,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
 
             let prev_balance = get_balance_retriable(
                 affected_account_id,
-                &block_header.prev_hash,
+                block_header.height,
                 balances_cache,
                 balance_client,
             )
@@ -466,7 +466,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
                     // balance is not changing here, we just note the line here
                     let balance = get_balance_retriable(
                         account_id,
-                        &block_header.prev_hash,
+                        block_header.height,
                         balances_cache,
                         balance_client,
                     )
@@ -513,7 +513,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
 
             let prev_balance = get_balance_retriable(
                 affected_account_id,
-                &block_header.prev_hash,
+                block_header.height,
                 balances_cache,
                 balance_client,
             )
@@ -587,7 +587,7 @@ fn get_deltas(
 
 async fn get_balance_retriable(
     account_id: &near_indexer_primitives::types::AccountId,
-    block_hash: &near_indexer_primitives::CryptoHash,
+    block_height: u64,
     balance_cache: &cache::BalanceCache,
     balance_client: &impl crate::BalanceClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
@@ -600,19 +600,19 @@ async fn get_balance_retriable(
                 "Failed to perform query to RPC after {} attempts. Stop trying.\nAccount {}, block_hash {}",
                 crate::RETRY_COUNT,
                 account_id.to_string(),
-                block_hash.to_string()
+                block_height.to_string()
             );
         }
         retry_attempt += 1;
 
-        match get_balance(account_id, block_hash, balance_cache, balance_client).await {
+        match get_balance(account_id, block_height, balance_cache, balance_client).await {
             Ok(res) => return Ok(res),
             Err(err) => {
                 tracing::error!(
                     target: crate::LOGGING_PREFIX,
                     "Failed to request account view details from RPC for account {}, block_hash {}.{}\n Retrying in {} milliseconds...",
                     account_id.to_string(),
-                    block_hash.to_string(),
+                    block_height.to_string(),
                     err,
                     interval.as_millis(),
                 );
@@ -627,13 +627,18 @@ async fn get_balance_retriable(
 
 async fn get_balance(
     account_id: &near_indexer_primitives::types::AccountId,
-    block_hash: &near_indexer_primitives::CryptoHash,
+    block_height: u64,
     balance_cache: &cache::BalanceCache,
     balance_client: &impl crate::BalanceClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
     let result = match balance_cache.get(account_id).await {
         None => {
-            let account_balance = balance_client.get_balance(account_id, block_hash).await?;
+            let account_balance = balance_client
+                .get_balance(
+                    account_id,
+                    &near_primitives::types::BlockId::Height(block_height),
+                )
+                .await?;
             balance_cache.set(account_id, account_balance).await;
             Ok(account_balance)
         }
