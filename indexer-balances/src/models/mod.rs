@@ -57,8 +57,8 @@ pub(crate) async fn select_one_retry_or_panic(
         {
             Ok(res) => return Ok(res),
             Err(async_error) => {
-                println!(
-                    // target: crate::LOGGING_PREFIX,
+                tracing::info!(
+                    target: crate::LOGGING_PREFIX,
                     "Error occurred during {}:\nFailed SELECT: {}\n Retrying in {} milliseconds...",
                     async_error,
                     query,
