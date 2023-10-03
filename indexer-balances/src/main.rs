@@ -2,7 +2,7 @@
 use async_trait::async_trait;
 use futures::StreamExt;
 use indexer_opts::Parser;
-use models::select_retry_or_panic;
+use models::{balance_changes::NearBalanceEvent, select_one_retry_or_panic, SqlxMethods};
 use near_lake_framework::near_indexer_primitives;
 use std::str::FromStr;
 
@@ -123,15 +123,17 @@ impl BalanceClient for PgBalanceClient {
 
         let near_primitives::types::BlockId::Height(block_height) = block_id else { unreachable!() };
 
-        let balance_event = match select_retry_or_panic(&self.pool, block_height, account_id, 5)
-            .await
+        let balance_event = match select_one_retry_or_panic(
+            &self.pool,
+            &NearBalanceEvent::select_prev_balance_query(*block_height, account_id),
+            crate::RETRY_COUNT,
+        )
+        .await
         {
             Ok(Some(balance_event)) => BalanceDetails {
                 non_staked: u128::from_str(&balance_event.absolute_nonstaked_amount.to_string())?,
                 staked: u128::from_str(&balance_event.absolute_staked_amount.to_string())?,
             },
-            // TODO can we trust that DB will have all required values or do we need to check RPC
-            // as well?
             Ok(None) => BalanceDetails {
                 non_staked: 0,
                 staked: 0,

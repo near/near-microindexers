@@ -45,6 +45,20 @@ impl crate::models::SqlxMethods for NearBalanceEvent {
             + " ON CONFLICT DO NOTHING")
     }
 
+    fn select_prev_balance_query(block_height: u64, account_id: &str) -> String {
+        format!(
+            "
+                 SELECT *
+                 FROM near_balance_events
+                 WHERE block_height < {}
+                 AND affected_account_id = '{}'
+                 ORDER BY event_index desc
+                 LIMIT 1;
+             ",
+            block_height, account_id
+        )
+    }
+
     fn name() -> String {
         "near_balance_events".to_string()
     }
