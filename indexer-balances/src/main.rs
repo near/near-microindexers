@@ -1,10 +1,7 @@
 // // TODO cleanup imports in all the files in the end
-use async_trait::async_trait;
 use futures::StreamExt;
 use indexer_opts::Parser;
-use models::{balance_changes::NearBalanceEvent, select_one_retry_or_panic, SqlxMethods};
 use near_lake_framework::near_indexer_primitives;
-use std::str::FromStr;
 
 mod cache;
 mod configs;
@@ -33,118 +30,6 @@ pub struct AccountWithBalance {
     pub balance: BalanceDetails,
 }
 
-#[async_trait]
-trait BalanceClient {
-    async fn get_balance(
-        &self,
-        account_id: &near_indexer_primitives::types::AccountId,
-        block_id: &near_primitives::types::BlockId,
-    ) -> anyhow::Result<crate::BalanceDetails>;
-}
-
-struct JsonRpcBalanceClient {
-    json_rpc_client: near_jsonrpc_client::JsonRpcClient,
-}
-
-impl JsonRpcBalanceClient {
-    pub fn new(json_rpc_client: near_jsonrpc_client::JsonRpcClient) -> Self {
-        Self { json_rpc_client }
-    }
-}
-
-#[async_trait::async_trait]
-impl BalanceClient for JsonRpcBalanceClient {
-    async fn get_balance(
-        &self,
-        account_id: &near_indexer_primitives::types::AccountId,
-        block_id: &near_primitives::types::BlockId,
-    ) -> anyhow::Result<crate::BalanceDetails> {
-        let query = near_jsonrpc_client::methods::query::RpcQueryRequest {
-            block_reference: near_primitives::types::BlockReference::BlockId(block_id.clone()),
-            request: near_primitives::views::QueryRequest::ViewAccount {
-                account_id: account_id.clone(),
-            },
-        };
-
-        let account_response = self.json_rpc_client.call(query).await;
-
-        if let Err(err) = account_response {
-            return match err.handler_error() {
-                Some(near_jsonrpc_primitives::types::query::RpcQueryError::UnknownAccount {
-                    ..
-                }) => Ok(crate::BalanceDetails {
-                    non_staked: 0,
-                    staked: 0,
-                }),
-                _ => Err(err.into()),
-            };
-        }
-
-        let response_kind = account_response.unwrap().kind;
-
-        match response_kind {
-            near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) => {
-                Ok(crate::BalanceDetails {
-                    non_staked: account.amount,
-                    staked: account.locked,
-                })
-            }
-            _ => unreachable!(
-                "Unreachable code! Asked for ViewAccount (block_id {:?}, account_id {})\nReceived\n\
-                {:#?}\nReport this to https://github.com/near/near-jsonrpc-client-rs",
-                block_id,
-                account_id.to_string(),
-                response_kind
-            ),
-        }
-    }
-}
-
-struct PgBalanceClient {
-    pool: sqlx::Pool<sqlx::Postgres>,
-}
-
-impl PgBalanceClient {
-    pub fn new(pool: sqlx::Pool<sqlx::Postgres>) -> Self {
-        Self { pool }
-    }
-}
-
-#[async_trait::async_trait]
-impl BalanceClient for PgBalanceClient {
-    async fn get_balance(
-        &self,
-        account_id: &near_indexer_primitives::types::AccountId,
-        block_id: &near_primitives::types::BlockId,
-    ) -> anyhow::Result<crate::BalanceDetails> {
-        if let near_primitives::types::BlockId::Hash(_) = block_id {
-            anyhow::bail!("Can not query by hash")
-        }
-
-        let near_primitives::types::BlockId::Height(block_height) = block_id else { unreachable!() };
-
-        let balance_event = match select_one_retry_or_panic(
-            &self.pool,
-            &NearBalanceEvent::select_prev_balance_query(*block_height, account_id),
-            crate::RETRY_COUNT,
-        )
-        .await
-        {
-            Ok(Some(balance_event)) => BalanceDetails {
-                non_staked: u128::from_str(&balance_event.absolute_nonstaked_amount.to_string())?,
-                staked: u128::from_str(&balance_event.absolute_staked_amount.to_string())?,
-            },
-            Ok(None) => BalanceDetails {
-                non_staked: 0,
-                staked: 0,
-            },
-            Err(e) => anyhow::bail!(e),
-        };
-
-        Ok(balance_event)
-    }
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
@@ -152,7 +37,6 @@ async fn main() -> anyhow::Result<()> {
     configs::init_tracing(opts.debug)?;
 
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
-    let balance_client = PgBalanceClient::new(pool.clone());
     let lake_config = opts.to_lake_config(&pool).await?;
     let (sender, stream) = near_lake_framework::streamer(lake_config);
     let end_block_height = opts.end_block_height.unwrap_or(u64::MAX);
@@ -162,9 +46,7 @@ async fn main() -> anyhow::Result<()> {
     let balances_cache = cache::BalanceCache::new(100_000);
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
-        .map(|streamer_message| {
-            handle_streamer_message(streamer_message, &pool, &balances_cache, &balance_client)
-        })
+        .map(|streamer_message| handle_streamer_message(streamer_message, &pool, &balances_cache))
         .buffer_unordered(1usize);
 
     while let Some(handle_message) = handlers.next().await {
@@ -203,13 +85,13 @@ async fn handle_streamer_message(
     streamer_message: near_indexer_primitives::StreamerMessage,
     pool: &sqlx::Pool<sqlx::Postgres>,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl BalanceClient,
 ) -> anyhow::Result<u64> {
     tracing::info!(
         target: LOGGING_PREFIX,
         "Processing block: {}",
         streamer_message.block.header.height
     );
+
     metrics::BLOCK_PROCESSED_TOTAL.inc();
     // Prometheus Gauge Metric type do not support u64
     // https://github.com/tikv/rust-prometheus/issues/470
@@ -220,7 +102,6 @@ async fn handle_streamer_message(
         &streamer_message.shards,
         &streamer_message.block.header,
         balances_cache,
-        balance_client,
     )
     .await?;
 

@@ -4,11 +4,9 @@ use std::str::FromStr;
 
 use crate::cache;
 use crate::models::balance_changes::NearBalanceEvent;
-use crate::models::PrintEnum;
+use crate::models::{PrintEnum, SqlxMethods};
 use bigdecimal::BigDecimal;
 use futures::future::try_join_all;
-use near_jsonrpc_client::errors::JsonRpcError;
-use near_jsonrpc_primitives::types::query::RpcQueryError;
 use near_lake_framework::near_indexer_primitives::{
     self,
     views::{ExecutionStatusView, StateChangeCauseView},
@@ -23,11 +21,10 @@ pub(crate) async fn store_balance_changes(
     shards: &[near_indexer_primitives::IndexerShard],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
 ) -> anyhow::Result<()> {
-    let futures = shards.iter().map(|shard| {
-        store_changes_for_chunk(pool, shard, block_header, balances_cache, balance_client)
-    });
+    let futures = shards
+        .iter()
+        .map(|shard| store_changes_for_chunk(pool, shard, block_header, balances_cache));
 
     try_join_all(futures).await.map(|_| ())
 }
@@ -45,23 +42,7 @@ async fn store_changes_for_chunk(
     shard: &near_indexer_primitives::IndexerShard,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
 ) -> anyhow::Result<()> {
-    let changes =
-        collect_balance_events_for_chunk(shard, block_header, balances_cache, balance_client)
-            .await?;
-
-    crate::models::chunked_insert(pool, &changes, 10).await?;
-
-    Ok(())
-}
-
-async fn collect_balance_events_for_chunk(
-    shard: &near_indexer_primitives::IndexerShard,
-    block_header: &near_indexer_primitives::views::BlockHeaderView,
-    balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
-) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut changes: Vec<NearBalanceEvent> = vec![];
     let mut changes_data =
         collect_data_from_balance_changes(&shard.state_changes, block_header.height)?;
@@ -72,7 +53,7 @@ async fn collect_balance_events_for_chunk(
             &changes_data.validators,
             block_header,
             balances_cache,
-            balance_client,
+            pool,
         )
         .await?,
     );
@@ -84,7 +65,7 @@ async fn collect_balance_events_for_chunk(
                 &mut changes_data.transactions,
                 block_header,
                 balances_cache,
-                balance_client,
+                pool,
             )
             .await?,
         ),
@@ -97,7 +78,7 @@ async fn collect_balance_events_for_chunk(
             &mut changes_data.rewards,
             block_header,
             balances_cache,
-            balance_client,
+            pool,
         )
         .await?,
     );
@@ -108,7 +89,9 @@ async fn collect_balance_events_for_chunk(
         change.event_index = BigDecimal::from_str(&(start_from_index + i as u128).to_string())?;
     }
 
-    Ok(changes)
+    crate::models::chunked_insert(pool, &changes, 10).await?;
+
+    Ok(())
 }
 
 fn collect_data_from_balance_changes(
@@ -215,15 +198,15 @@ async fn store_validator_accounts_update_for_chunk(
     validator_changes: &[crate::AccountWithBalance],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
+    pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
     for new_details in validator_changes {
-        let prev_balance = get_balance_retriable(
+        let prev_balance = get_balance(
             &new_details.account_id,
             block_header.height,
             balances_cache,
-            balance_client,
+            pool,
         )
         .await?;
         let deltas = get_deltas(&new_details.balance, &prev_balance)?;
@@ -266,7 +249,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
     >,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
+    pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
 
@@ -277,11 +260,11 @@ async fn store_transaction_execution_outcomes_for_chunk(
             _ => Some(&transaction.transaction.receiver_id),
         };
 
-        let prev_balance = get_balance_retriable(
+        let prev_balance = get_balance(
             affected_account_id,
             block_header.height,
             balances_cache,
-            balance_client,
+            pool,
         )
         .await?;
 
@@ -341,13 +324,9 @@ async fn store_transaction_execution_outcomes_for_chunk(
         if let Some(account_id) = involved_account_id {
             if account_id != affected_account_id {
                 // balance is not changing here, we just note the line here
-                let balance = get_balance_retriable(
-                    account_id,
-                    block_header.height,
-                    balances_cache,
-                    balance_client,
-                )
-                .await?;
+                let balance =
+                    get_balance(account_id, block_header.height, balances_cache, pool).await?;
+
                 result.push(NearBalanceEvent {
                     event_index: BigDecimal::zero(), // will enumerate later
                     block_timestamp: block_header.timestamp.into(),
@@ -396,7 +375,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
     reward_changes: &mut HashMap<near_indexer_primitives::CryptoHash, crate::AccountWithBalance>,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
+    pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
 
@@ -419,11 +398,11 @@ async fn store_receipt_execution_outcomes_for_chunk(
             );
             }
 
-            let prev_balance = get_balance_retriable(
+            let prev_balance = get_balance(
                 affected_account_id,
                 block_header.height,
                 balances_cache,
-                balance_client,
+                pool,
             )
             .await?;
 
@@ -464,13 +443,9 @@ async fn store_receipt_execution_outcomes_for_chunk(
             if let Some(account_id) = involved_account_id {
                 if account_id != affected_account_id {
                     // balance is not changing here, we just note the line here
-                    let balance = get_balance_retriable(
-                        account_id,
-                        block_header.height,
-                        balances_cache,
-                        balance_client,
-                    )
-                    .await?;
+                    let balance =
+                        get_balance(account_id, block_header.height, balances_cache, pool).await?;
+
                     result.push(NearBalanceEvent {
                         event_index: BigDecimal::zero(), // will enumerate later
                         block_timestamp: block_header.timestamp.into(),
@@ -511,11 +486,11 @@ async fn store_receipt_execution_outcomes_for_chunk(
             );
             }
 
-            let prev_balance = get_balance_retriable(
+            let prev_balance = get_balance(
                 affected_account_id,
                 block_header.height,
                 balances_cache,
-                balance_client,
+                pool,
             )
             .await?;
             let deltas = get_deltas(&details_after_reward.balance, &prev_balance)?;
@@ -585,64 +560,35 @@ fn get_deltas(
     ))
 }
 
-async fn get_balance_retriable(
-    account_id: &near_indexer_primitives::types::AccountId,
-    block_height: u64,
-    balance_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
-) -> anyhow::Result<crate::BalanceDetails> {
-    let mut interval = crate::INTERVAL;
-    let mut retry_attempt = 0usize;
-
-    loop {
-        if retry_attempt == crate::RETRY_COUNT {
-            anyhow::bail!(
-                "Failed to perform query to RPC after {} attempts. Stop trying.\nAccount {}, block_hash {}",
-                crate::RETRY_COUNT,
-                account_id.to_string(),
-                block_height.to_string()
-            );
-        }
-        retry_attempt += 1;
-
-        match get_balance(account_id, block_height, balance_cache, balance_client).await {
-            Ok(res) => return Ok(res),
-            Err(err) => {
-                tracing::error!(
-                    target: crate::LOGGING_PREFIX,
-                    "Failed to request account view details from RPC for account {}, block_hash {}.{}\n Retrying in {} milliseconds...",
-                    account_id.to_string(),
-                    block_height.to_string(),
-                    err,
-                    interval.as_millis(),
-                );
-                tokio::time::sleep(interval).await;
-                if interval < crate::MAX_DELAY_TIME {
-                    interval *= 2;
-                }
-            }
-        }
-    }
-}
-
 async fn get_balance(
     account_id: &near_indexer_primitives::types::AccountId,
     block_height: u64,
     balance_cache: &cache::BalanceCache,
-    balance_client: &impl crate::BalanceClient,
+    pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> anyhow::Result<crate::BalanceDetails> {
-    let result = match balance_cache.get(account_id).await {
-        None => {
-            let account_balance = balance_client
-                .get_balance(
-                    account_id,
-                    &near_primitives::types::BlockId::Height(block_height),
-                )
-                .await?;
-            balance_cache.set(account_id, account_balance).await;
-            Ok(account_balance)
-        }
-        Some(balance) => Ok(balance),
+    if let Some(balance) = balance_cache.get(account_id).await {
+        return Ok(balance);
+    }
+
+    let account_balance = match crate::models::select_one_retry_or_panic(
+        pool,
+        &NearBalanceEvent::select_prev_balance_query(block_height, account_id),
+        crate::RETRY_COUNT,
+    )
+    .await
+    {
+        Ok(Some(balance_event)) => crate::BalanceDetails {
+            non_staked: u128::from_str(&balance_event.absolute_nonstaked_amount.to_string())?,
+            staked: u128::from_str(&balance_event.absolute_staked_amount.to_string())?,
+        },
+        Ok(None) => crate::BalanceDetails {
+            non_staked: 0,
+            staked: 0,
+        },
+        Err(e) => anyhow::bail!(e),
     };
-    result
+
+    balance_cache.set(account_id, account_balance).await;
+
+    Ok(account_balance)
 }
