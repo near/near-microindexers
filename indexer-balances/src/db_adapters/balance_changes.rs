@@ -202,7 +202,7 @@ async fn store_validator_accounts_update_for_chunk(
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
     for new_details in validator_changes {
-        let prev_balance = get_balance(
+        let prev_balance = get_balance_before_block(
             &new_details.account_id,
             block_header.height,
             balances_cache,
@@ -260,7 +260,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
             _ => Some(&transaction.transaction.receiver_id),
         };
 
-        let prev_balance = get_balance(
+        let prev_balance = get_balance_before_block(
             affected_account_id,
             block_header.height,
             balances_cache,
@@ -325,7 +325,8 @@ async fn store_transaction_execution_outcomes_for_chunk(
             if account_id != affected_account_id {
                 // balance is not changing here, we just note the line here
                 let balance =
-                    get_balance(account_id, block_header.height, balances_cache, pool).await?;
+                    get_balance_before_block(account_id, block_header.height, balances_cache, pool)
+                        .await?;
 
                 result.push(NearBalanceEvent {
                     event_index: BigDecimal::zero(), // will enumerate later
@@ -398,7 +399,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
             );
             }
 
-            let prev_balance = get_balance(
+            let prev_balance = get_balance_before_block(
                 affected_account_id,
                 block_header.height,
                 balances_cache,
@@ -443,8 +444,13 @@ async fn store_receipt_execution_outcomes_for_chunk(
             if let Some(account_id) = involved_account_id {
                 if account_id != affected_account_id {
                     // balance is not changing here, we just note the line here
-                    let balance =
-                        get_balance(account_id, block_header.height, balances_cache, pool).await?;
+                    let balance = get_balance_before_block(
+                        account_id,
+                        block_header.height,
+                        balances_cache,
+                        pool,
+                    )
+                    .await?;
 
                     result.push(NearBalanceEvent {
                         event_index: BigDecimal::zero(), // will enumerate later
@@ -486,7 +492,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
             );
             }
 
-            let prev_balance = get_balance(
+            let prev_balance = get_balance_before_block(
                 affected_account_id,
                 block_header.height,
                 balances_cache,
@@ -560,7 +566,7 @@ fn get_deltas(
     ))
 }
 
-async fn get_balance(
+async fn get_balance_before_block(
     account_id: &near_indexer_primitives::types::AccountId,
     block_height: u64,
     balance_cache: &cache::BalanceCache,
