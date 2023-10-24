@@ -3,6 +3,7 @@ use futures::StreamExt;
 use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
 
+mod balance_client;
 mod cache;
 mod configs;
 mod db_adapters;
@@ -44,9 +45,12 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(metrics::init_server(opts.port).expect("Failed to start metrics server"));
 
     let balances_cache = cache::BalanceCache::new(100_000);
+    let balance_client = balance_client::PgBalanceClient::new(pool.clone());
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
-        .map(|streamer_message| handle_streamer_message(streamer_message, &pool, &balances_cache))
+        .map(|streamer_message| {
+            handle_streamer_message(streamer_message, &pool, &balances_cache, &balance_client)
+        })
         .buffer_unordered(1usize);
 
     while let Some(handle_message) = handlers.next().await {
@@ -85,6 +89,7 @@ async fn handle_streamer_message(
     streamer_message: near_indexer_primitives::StreamerMessage,
     pool: &sqlx::Pool<sqlx::Postgres>,
     balances_cache: &cache::BalanceCache,
+    balance_client: &impl balance_client::BalanceClient,
 ) -> anyhow::Result<u64> {
     tracing::info!(
         target: LOGGING_PREFIX,
@@ -102,6 +107,7 @@ async fn handle_streamer_message(
         &streamer_message.shards,
         &streamer_message.block.header,
         balances_cache,
+        balance_client,
     )
     .await?;
 
