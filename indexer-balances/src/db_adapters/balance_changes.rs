@@ -21,7 +21,7 @@ pub(crate) async fn store_balance_changes(
     shards: &[near_indexer_primitives::IndexerShard],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::balance_client::BalanceClient,
+    balance_client: &dyn crate::balance_client::BalanceClient,
 ) -> anyhow::Result<()> {
     let futures = shards.iter().map(|shard| {
         store_changes_for_chunk(pool, shard, block_header, balances_cache, balance_client)
@@ -43,7 +43,7 @@ async fn store_changes_for_chunk(
     shard: &near_indexer_primitives::IndexerShard,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::balance_client::BalanceClient,
+    balance_client: &dyn crate::balance_client::BalanceClient,
 ) -> anyhow::Result<()> {
     let mut changes: Vec<NearBalanceEvent> = vec![];
     let mut changes_data =
@@ -200,7 +200,7 @@ async fn store_validator_accounts_update_for_chunk(
     validator_changes: &[crate::AccountWithBalance],
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::balance_client::BalanceClient,
+    balance_client: &dyn crate::balance_client::BalanceClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
     for new_details in validator_changes {
@@ -251,7 +251,7 @@ async fn store_transaction_execution_outcomes_for_chunk(
     >,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::balance_client::BalanceClient,
+    balance_client: &dyn crate::balance_client::BalanceClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
 
@@ -382,7 +382,7 @@ async fn store_receipt_execution_outcomes_for_chunk(
     reward_changes: &mut HashMap<near_indexer_primitives::CryptoHash, crate::AccountWithBalance>,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl crate::balance_client::BalanceClient,
+    balance_client: &dyn crate::balance_client::BalanceClient,
 ) -> anyhow::Result<Vec<NearBalanceEvent>> {
     let mut result: Vec<NearBalanceEvent> = vec![];
 
@@ -576,7 +576,7 @@ async fn get_balance_before_block(
     account_id: &near_indexer_primitives::types::AccountId,
     block_header: &near_indexer_primitives::views::BlockHeaderView,
     balance_cache: &cache::BalanceCache,
-    balance_client: &impl crate::balance_client::BalanceClient,
+    balance_client: &dyn crate::balance_client::BalanceClient,
 ) -> anyhow::Result<crate::BalanceDetails> {
     if let Some(balance) = balance_cache.get(account_id).await {
         return Ok(balance);

@@ -49,6 +49,17 @@ pub struct Opts {
     /// Database URL
     #[clap(long, short, env)]
     pub database_url: String,
+    /// How NEAR balances, which are used to calculate deltas, should be fetched, either from JSON
+    /// RPC or from the database. This is only applicable for the `indexer-balances` micro-indexer
+    #[clap(long, env, arg_enum, default_value = "db")]
+    pub balance_mode: BalanceMode,
+}
+
+/// Represents the type of balance fetching mode
+#[derive(ArgEnum, Debug, Clone, PartialEq, Eq)]
+pub enum BalanceMode {
+    DB,
+    RPC,
 }
 
 /// Represents the chain-id variants for indexer to stream from

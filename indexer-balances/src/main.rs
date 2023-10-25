@@ -45,11 +45,24 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(metrics::init_server(opts.port).expect("Failed to start metrics server"));
 
     let balances_cache = cache::BalanceCache::new(100_000);
-    let balance_client = balance_client::PgBalanceClient::new(pool.clone());
+
+    let balance_client: Box<dyn balance_client::BalanceClient> = match opts.balance_mode {
+        indexer_opts::BalanceMode::DB => {
+            Box::new(balance_client::PgBalanceClient::new(pool.clone()))
+        }
+        indexer_opts::BalanceMode::RPC => {
+            let rpc_url = opts
+                .rpc_url
+                .as_ref()
+                .expect("RPC_URL is required to run indexer-balances");
+            let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
+            Box::new(balance_client::JsonRpcBalanceClient::new(json_rpc_client))
+        }
+    };
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
         .map(|streamer_message| {
-            handle_streamer_message(streamer_message, &pool, &balances_cache, &balance_client)
+            handle_streamer_message(streamer_message, &pool, &balances_cache, &*balance_client)
         })
         .buffer_unordered(1usize);
 
@@ -89,7 +102,7 @@ async fn handle_streamer_message(
     streamer_message: near_indexer_primitives::StreamerMessage,
     pool: &sqlx::Pool<sqlx::Postgres>,
     balances_cache: &cache::BalanceCache,
-    balance_client: &impl balance_client::BalanceClient,
+    balance_client: &dyn balance_client::BalanceClient,
 ) -> anyhow::Result<u64> {
     tracing::info!(
         target: LOGGING_PREFIX,
