@@ -54,7 +54,7 @@ impl BalanceClient for JsonRpcBalanceClient {
             };
         }
 
-        let response_kind = account_response.unwrap().kind;
+        let response_kind = account_response?.kind;
 
         match response_kind {
             near_jsonrpc_primitives::types::query::QueryResponseKind::ViewAccount(account) => {
