@@ -3,7 +3,7 @@ use sqlx::Arguments;
 
 use crate::models::FieldCount;
 
-#[derive(Debug, sqlx::FromRow, FieldCount)]
+#[derive(Debug, sqlx::FromRow, FieldCount, PartialEq)]
 pub struct NearBalanceEvent {
     pub event_index: BigDecimal,
     pub block_timestamp: BigDecimal,
@@ -43,6 +43,20 @@ impl crate::models::SqlxMethods for NearBalanceEvent {
         Ok("INSERT INTO near_balance_events VALUES ".to_owned()
             + &crate::models::create_placeholders(count, NearBalanceEvent::field_count())?
             + " ON CONFLICT DO NOTHING")
+    }
+
+    fn select_prev_balance_query(block_height: u64, account_id: &str) -> String {
+        format!(
+            "
+                 SELECT *
+                 FROM near_balance_events
+                 WHERE block_height < {}
+                 AND affected_account_id = '{}'
+                 ORDER BY event_index desc
+                 LIMIT 1;
+             ",
+            block_height, account_id
+        )
     }
 
     fn name() -> String {

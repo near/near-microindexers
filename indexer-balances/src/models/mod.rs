@@ -4,6 +4,8 @@ use std::fmt::Write;
 use near_lake_framework::near_indexer_primitives::views::ExecutionStatusView;
 
 pub(crate) use indexer_balances::FieldCount;
+
+use self::balance_changes::NearBalanceEvent;
 pub(crate) mod balance_changes;
 
 pub trait FieldCount {
@@ -15,6 +17,8 @@ pub trait SqlxMethods {
     fn add_to_args(&self, args: &mut sqlx::postgres::PgArguments);
 
     fn insert_query(count: usize) -> anyhow::Result<String>;
+
+    fn select_prev_balance_query(block_height: u64, account_id: &str) -> String;
 
     fn name() -> String;
 }
@@ -28,6 +32,45 @@ pub async fn chunked_insert<T: SqlxMethods + std::fmt::Debug>(
         .chunks(crate::db_adapters::CHUNK_SIZE_FOR_BATCH_INSERT)
         .map(|items_part| insert_retry_or_panic(pool, items_part, retry_count));
     try_join_all(futures).await.map(|_| ())
+}
+
+pub(crate) async fn select_one_retry_or_panic(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    query: &str,
+    retry_count: usize,
+) -> anyhow::Result<Option<NearBalanceEvent>> {
+    let mut interval = crate::INTERVAL;
+    let mut retry_attempt = 0usize;
+
+    loop {
+        if retry_attempt == retry_count {
+            return Err(anyhow::anyhow!(
+                "Failed to perform query to database after {} attempts. Stop trying.",
+                retry_count
+            ));
+        }
+        retry_attempt += 1;
+
+        match sqlx::query_as::<_, NearBalanceEvent>(query)
+            .fetch_optional(pool)
+            .await
+        {
+            Ok(res) => return Ok(res),
+            Err(async_error) => {
+                tracing::info!(
+                    target: crate::LOGGING_PREFIX,
+                    "Error occurred during {}:\nFailed SELECT: {}\n Retrying in {} milliseconds...",
+                    async_error,
+                    query,
+                    interval.as_millis(),
+                );
+                tokio::time::sleep(interval).await;
+                if interval < crate::MAX_DELAY_TIME {
+                    interval *= 2;
+                }
+            }
+        }
+    }
 }
 
 async fn insert_retry_or_panic<T: SqlxMethods + std::fmt::Debug>(

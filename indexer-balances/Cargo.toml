@@ -9,6 +9,7 @@ proc-macro = true
 
 [dependencies]
 actix-web = "=4.0.1"
+async-trait = "0.1.74"
 anyhow = "1.0.51"
 bigdecimal = { version = "0.2", features = ["serde"] }
 cached = "0.23.0"

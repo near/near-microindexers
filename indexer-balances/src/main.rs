@@ -1,10 +1,10 @@
 // // TODO cleanup imports in all the files in the end
-use cached::SizedCache;
 use futures::StreamExt;
 use indexer_opts::Parser;
 use near_lake_framework::near_indexer_primitives;
-use tokio::sync::Mutex;
 
+mod balance_client;
+mod cache;
 mod configs;
 mod db_adapters;
 mod metrics;
@@ -31,20 +31,11 @@ pub struct AccountWithBalance {
     pub balance: BalanceDetails,
 }
 
-pub type BalanceCache =
-    std::sync::Arc<Mutex<SizedCache<near_indexer_primitives::types::AccountId, BalanceDetails>>>;
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let opts = indexer_opts::Opts::parse();
     configs::init_tracing(opts.debug)?;
-
-    let rpc_url = opts
-        .rpc_url
-        .as_ref()
-        .expect("RPC_URL is required to run indexer-balances");
-    let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
 
     let pool = sqlx::PgPool::connect(&opts.database_url).await?;
     let lake_config = opts.to_lake_config(&pool).await?;
@@ -53,13 +44,25 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(metrics::init_server(opts.port).expect("Failed to start metrics server"));
 
-    // We want to prevent unnecessary RPC queries to find previous balance
-    let balances_cache: BalanceCache =
-        std::sync::Arc::new(Mutex::new(SizedCache::with_size(100_000)));
+    let balances_cache = cache::BalanceCache::new(100_000);
+
+    let balance_client: Box<dyn balance_client::BalanceClient> = match opts.balance_mode {
+        indexer_opts::BalanceMode::DB => {
+            Box::new(balance_client::PgBalanceClient::new(pool.clone()))
+        }
+        indexer_opts::BalanceMode::RPC => {
+            let rpc_url = opts
+                .rpc_url
+                .as_ref()
+                .expect("RPC_URL is required to run indexer-balances");
+            let json_rpc_client = near_jsonrpc_client::JsonRpcClient::connect(rpc_url);
+            Box::new(balance_client::JsonRpcBalanceClient::new(json_rpc_client))
+        }
+    };
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)
         .map(|streamer_message| {
-            handle_streamer_message(streamer_message, &pool, &balances_cache, &json_rpc_client)
+            handle_streamer_message(streamer_message, &pool, &balances_cache, &*balance_client)
         })
         .buffer_unordered(1usize);
 
@@ -98,9 +101,15 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_streamer_message(
     streamer_message: near_indexer_primitives::StreamerMessage,
     pool: &sqlx::Pool<sqlx::Postgres>,
-    balances_cache: &BalanceCache,
-    json_rpc_client: &near_jsonrpc_client::JsonRpcClient,
+    balances_cache: &cache::BalanceCache,
+    balance_client: &dyn balance_client::BalanceClient,
 ) -> anyhow::Result<u64> {
+    tracing::info!(
+        target: LOGGING_PREFIX,
+        "Processing block: {}",
+        streamer_message.block.header.height
+    );
+
     metrics::BLOCK_PROCESSED_TOTAL.inc();
     // Prometheus Gauge Metric type do not support u64
     // https://github.com/tikv/rust-prometheus/issues/470
@@ -111,7 +120,7 @@ async fn handle_streamer_message(
         &streamer_message.shards,
         &streamer_message.block.header,
         balances_cache,
-        json_rpc_client,
+        balance_client,
     )
     .await?;
 

@@ -148,3 +148,13 @@ This solution stores all the creations/deletions, so accounts may appear in the 
 
 We use `indexer-balances` in production; we use FT part of `indexer-events` in production as well.  
 The other pieces are frozen for now, they need to be upgraded and reviewed before any production usage.
+
+### What is "Balance Mode" for `indexer-balances`
+
+`indexer-balances` requires the Near balance prior to the current block in order to calculate, and store, the delta. Previously, this value was fetched directly from JSON RPC, but as transaction volume increased, this method became a bottleneck within the application. A more performant approach is to fetch the previously stored balance from the DB, but this also comes with drawbacks. In summary:
+- `DB` - Performant, but potentially more error prone as incorrect deltas propagate to deltas following
+- `RPC` - Less performant, but also less error prone as the deltas rely on actual on-chain balances
+
+Additionally, as `DB` relies on existing data, it can not be started from any arbitrary block, it requires the all blocks prior have already been indexed. The limitation does not exist for `RPC`.
+
+The `--balance-mode` flag allows switching between the described methods so that the trade-offs can be more effectively managed.
